@@ -1,9 +1,9 @@
 import socket
 import os
 import time
-from ftp_raw import FtpRawRespHandler as FtpRaw
-from ftp_parser import response_parse_error
-from ftp_parser import ftp_client_parser
+from .ftp_raw import FtpRawRespHandler as FtpRaw
+from .ftp_parser import response_parse_error
+from .ftp_parser import ftp_client_parser
 import inspect
 import subprocess
 import re

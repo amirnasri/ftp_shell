@@ -1,11 +1,11 @@
-import ftp_session
-from ftp_session import connection_closed_error
-from ftp_session import response_error
+from . import ftp_session
+from .ftp_session import connection_closed_error
+from .ftp_session import response_error
 import sys
 import getpass
 import readline
 import types
-from ftp_session import login_error
+from .ftp_session import login_error
 import socket
 import subprocess
 import os
