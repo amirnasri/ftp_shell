@@ -1,2 +1,2 @@
 #!/bin/sh
-python3 ftp_cli.py $*
+python3 -m ftpshell.ftp_cli $*

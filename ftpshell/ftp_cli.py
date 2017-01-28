@@ -2,12 +2,10 @@ from . import ftp_session
 from .ftp_session import connection_closed_error
 from .ftp_session import response_error
 import sys
-import getpass
 import readline
 import types
 from .ftp_session import login_error
 import socket
-import subprocess
 import os
 
 class cli_error(BaseException): pass
@@ -86,7 +84,7 @@ class FtpCli:
         ''' Parse command arguments and use them to start a ftp session. 
         '''
         if len(sys.argv) != 2:
-            print('Usage: %s [username[:password]@]server[:port]' % sys.argv[0])
+            print('Usage: ftpshell [username[:password]@]server[:port]')
             raise cli_error
 
         username = ''
