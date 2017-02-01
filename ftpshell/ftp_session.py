@@ -340,7 +340,6 @@ class ftp_session:
 	'''	usage: ls [dirname] '''
 	@ftp_command
 	def ls(self, args):
-
 		if len(args) > 1:
 			ftp_session.print_usage()
 			return
@@ -528,7 +527,7 @@ class ftp_session:
 		''' run a single ftp command received from the ftp_cli module.
 		'''
 		if cmd_line[0] == '!':
-			subprocess.run(cmd_line[1:], shell=True)
+			subprocess.call(cmd_line[1:], shell=True)
 			return
 		cmd_line = cmd_line.split()
 		cmd = cmd_line[0]

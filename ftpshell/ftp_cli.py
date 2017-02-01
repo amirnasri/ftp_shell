@@ -5,6 +5,7 @@ import sys
 import readline
 import types
 from .ftp_session import login_error
+from .ftp_session import LsColors
 import socket
 import os
 
@@ -29,12 +30,14 @@ class Completer(object):
         end = readline.get_endidx()
         being_completed = origline[begin:end]
         words = origline.split()
+        '''
         print('origline=%s' % repr(origline))
         print('begin=%s' % begin)
         print('end=%s'% end)
         print('being_completed=%s' % being_completed)
         print('words=%s' % words)
         print()
+        '''
         response = None
         if state == 0:
             # This is the first time for this text, so build a match list.
@@ -122,7 +125,9 @@ class FtpCli:
 
     def get_prompt(self):
         if self.ftp.logged_in:
-            return '%s@%s: %s> ' % (self.ftp.username, self.ftp.server, self.ftp.get_cwd())
+            return '%s%s%s@%s:%s %s%s>%s ' % (LsColors.OKBLUE, LsColors.BOLD, self.ftp.username,
+                                          self.ftp.server, LsColors.ENDC, LsColors.OKGREEN,
+                                              self.ftp.get_cwd(), LsColors.ENDC)
         else:
             return '-> '
 
