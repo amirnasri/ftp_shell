@@ -27,7 +27,8 @@ class FtpCli:
 
     def proc_input_args(self):
         """ Parse command arguments and use them to start a
-         ftp session. """
+        ftp session.
+        """
         if len(sys.argv) != 2:
             print('Usage: ftpshell [username[:password]@]server[:port]')
             raise cli_error
@@ -169,4 +170,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-    
