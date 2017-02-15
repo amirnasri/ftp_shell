@@ -4,7 +4,7 @@ Handle responses from the server to ftp raw commands.
 
 from enum import Enum
 
-class response_parse_error(Exception): pass
+class parse_response_error(Exception): pass
 
 class transfer(object):
     pass
@@ -19,13 +19,13 @@ class response:
         
     def process_newline(self, newline):
         if not self.multiline:
-            # Only the first line of response comes here (for both single-line and multiline responses).
+            # Only the first line of response comes here (for both single-line and multi-line responses).
             resp_code = int(newline[:3])
             if (resp_code > 100 and resp_code < 600 and
                     (chr(newline[3]) == ' ' or chr(newline[3]) == '-')):
                 self.resp_code = resp_code
             else:
-                raise response_parse_error
+                raise parse_response_error
             
             if (chr(newline[3]) == '-'):
                 self.multiline = True

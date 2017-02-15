@@ -2,7 +2,7 @@ import socket
 import os
 import time
 from .ftp_raw import FtpRawRespHandler as FtpRaw
-from .ftp_parser import response_parse_error
+from .ftp_parser import parse_response_error
 from .ftp_parser import ftp_client_parser
 import inspect
 import subprocess
@@ -85,16 +85,39 @@ class ftp_session:
 		self.server = server
 		self.port = port
 		self.load_text_file_extensions()
+		self.passive = True
+		self.verbose = True
+		self.init_session()
+
+	def init_session(self):
 		self.cwd = ''
 		self.cmd = None
 		self.transfer_type = None
 		self.parser = ftp_client_parser()
-		self.passive = False
-		self.verbose = True
 		self.connected = False
 		self.logged_in = False
 		self.data_socket = None
 		self.client = None
+
+	def close_server(self):
+		self.disconnect_server()
+		self.init_session()
+
+	def connect_server(self, server, port):
+		try:
+			self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+			self.client.connect((server, port))
+		except socket.error:
+			print("Could not connect to the server.")
+		else:
+			self.connected = True
+
+	def disconnect_server(self):
+		if self.connected:
+			self.client.close()
+			if self.data_socket:
+				self.data_socket.close()
+			self.connected = False
 
 	def get_resp(self):
 		while True:
@@ -104,10 +127,10 @@ class ftp_session:
 				raise connection_closed_error
 			try:
 				resp = self.parser.get_resp(s, self.verbose)
-			except response_parse_error:
+			except parse_response_error:
 				print('Error occured while parsing response to ftp command %s\n' % self.cmd, file=sys.stdout)
-				self.cmd = None
-				return None
+				self.close_server()
+				raise
 			if resp:
 				if self.parser.resp_failed(resp):
 					raise response_error
@@ -460,7 +483,7 @@ class ftp_session:
 
 		username = args[0]
 		if not self.connected:
-			self.connect(self.server, self.port)
+			self.connect_server(self.server, self.port)
 		self.send_raw_command("USER %s\r\n" % username)
 		try:
 			resp = self.get_resp()
@@ -494,7 +517,7 @@ class ftp_session:
 			password = 'guest'
 		if password is None:
 			password = getpass.getpass(prompt='Password:')
-		self.connect(self.server, self.port)
+		self.connect_server(self.server, self.port)
 		self.get_welcome_msg()
 		self.send_raw_command("USER %s\r\n" % username)
 		try:
@@ -540,22 +563,6 @@ class ftp_session:
 			getattr(ftp_session, cmd)(self, cmd_args)
 		else:
 			raise cmd_not_implemented_error
-
-	def connect(self, server, port):
-		try:
-			self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-			self.client.connect((server, port))
-		except socket.error:
-			print("Could not connect to the server.")
-		else:
-			self.connected = True
-
-	def disconnect(self):
-		if self.connected:
-			self.client.close()
-			if self.data_socket:
-				self.data_socket.close()
-			self.connected = False
 
 
 if __name__ == '__main__':
