@@ -1,6 +1,9 @@
-'''
-Handle responses from the server to ftp raw commands.
-'''
+"""
+ftp raw command parser module.
+
+This module is used by ftp_session module to parse responses
+from the server to raw ftp commands.
+"""
 
 from enum import Enum
 
@@ -36,8 +39,8 @@ class response:
                 self.is_complete = True
         
     def process_string(self, s):
-        ''' Parse a string received from the server into lines
-        and then process each line. ''' 
+        """ Parse a string received from the server into lines
+        and then process each line. """
         while True:
             # TODO: change '\r\n' to '\r*\n'
             rn_pos = s.find(b'\r\n')

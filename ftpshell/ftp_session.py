@@ -1,5 +1,11 @@
+"""
+ftp session module.
+
+This module provides FtpSession class which is
+used by ftp_cli to establish a session with the ftp server and
+ start the communication.
+"""
 import socket
-import os
 import time
 from .ftp_raw import FtpRawRespHandler as FtpRaw
 from .ftp_parser import parse_response_error
@@ -17,67 +23,14 @@ class connection_closed_error(ftp_error): pass
 class login_error(ftp_error): pass
 class response_error(Exception): pass
 
-'''
-TODO:
-- Fixe get argument parsing
-- Add mkdir, rm, rmdir, mv, status, user, pass, site, active(port), lcd, chmod, cat, help, put (use lftp syntax)
-- Add command completion using tab based on method documents
-- Add history search using arrow key
-- Add installation using python setup.py
-- Add !command for executing shell commands
-'''
-def ftp_command(f):
-	f.ftp_command = True
-	return f
-
-
-def check_args(f):
-	def new_f(*args, **kwargs):
-		if hasattr(f, '__doc__'):
-			doc = f.__doc__.split('\n')
-			doc_ = None
-			for line in doc:
-				p = line.find('usage:')
-				if p != -1:
-					doc_ = line[p + 6:]
-					break
-			if doc_:
-				n_args = len(doc_.split()) - 1
-				print(n_args, args, kwargs)
-				assert n_args == len(args[1]), \
-					"%s expects %d arguments, %d given.\nusage: %s" % (new_f.__code__.co_name, n_args, len(args[1]), doc_)
-				f(*args, **kwargs)
-
-	return new_f
-
-# Type of data transfer on the data channel
-class transfer_type:
-	list = 1
-	file = 2
-
-class LsColors:
-	HEADER = '\033[95m'
-	OKBLUE = '\033[94m'
-	OKGREEN = '\033[92m'
-	WARNING = '\033[93m'
-	FAIL = '\033[91m'
-	ENDC = '\033[0m'
-	BOLD = '\033[1m'
-	UNDERLINE = '\033[4m'
-
-	regex = re.compile(r'\*\.(.+)=(.+)')
-	output = subprocess.check_output(['echo $LS_COLORS'], shell=True)
-	d = {}
-	if output:
-		output = str(output).split(':')
-		for i in output:
-			m = regex.match(i)
-			if m:
-				d[m.group(1)] = ('\033[%sm' % m.group(2))
-
-
-
-class ftp_session:
+class FtpSession:
+	"""
+	Provides function to establish a connection with the server
+	and high level function to communicate with the server such
+	as get, put, and ls. This class relies on ftp_parser module
+	for parsing raw ftp response and on ftp_raw module for handling
+	the low level raw ftp commands such as RETR, STOR, and LIST.
+	"""
 	READ_BLOCK_SIZE = 1024
 
 	def __init__(self, server, port=21):
@@ -121,8 +74,7 @@ class ftp_session:
 
 	def get_resp(self):
 		while True:
-			s = self.client.recv(ftp_session.READ_BLOCK_SIZE)
-			#print("string received from server: %s" % s)
+			s = self.client.recv(FtpSession.READ_BLOCK_SIZE)
 			if (s == b''):
 				raise connection_closed_error
 			try:
@@ -178,7 +130,7 @@ class ftp_session:
 	@ftp_command
 	def ascii(self, args):
 		if len(args) != 0:
-			ftp_session.print_usage()
+			FtpSession.print_usage()
 			return
 		self.transfer_type = 'A'
 		print("Switched to ascii mode")
@@ -186,7 +138,7 @@ class ftp_session:
 	@ftp_command
 	def binary(self, args):
 		if len(args) != 0:
-			ftp_session.print_usage()
+			FtpSession.print_usage()
 			return
 		self.transfer_type = 'I'
 		print("Switched to binary mode")
@@ -206,7 +158,8 @@ class ftp_session:
 		return filename, file_ext
 
 	def setup_data_transfer(self, data_command):
-		# Send PASV or Port command to prepare for data transfer
+		# To prepare for data transfer, Send PASV (passive transfer mode)
+		# or Port command (active transfer mode).
 		if self.passive:
 			self.send_raw_command("PASV\r\n")
 			resp = self.get_resp()
@@ -235,7 +188,6 @@ class ftp_session:
 			self.send_raw_command(data_command)
 			resp = self.get_resp()
 			data_socket, address = data_socket.accept()
-			#print("connection received from client %s" % str(address))
 			if address[0] != self.client.getpeername()[0]:
 				data_socket.close()
 				data_socket = None
@@ -243,12 +195,12 @@ class ftp_session:
 
 	@ftp_command
 	def get(self, args):
-		'''	usage: get path-to-file '''
+		""" usage: get path-to-file """
 		if len(args) != 1:
-			ftp_session.print_usage()
+			FtpSession.print_usage()
 			return
 		path = args[0]
-		filename, file_ext = ftp_session.get_file_info(path)
+		filename, file_ext = FtpSession.get_file_info(path)
 		# If transfer type is not set, send TYPE command depending on the type of the file
 		# (TYPE A for ascii files and TYPE I for binary files)
 		transfer_type = self.transfer_type
@@ -269,7 +221,7 @@ class ftp_session:
 		filesize = 0
 		curr_time = time.time()
 		while True:
-			file_data = self.data_socket.recv(ftp_session.READ_BLOCK_SIZE)
+			file_data = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE)
 			if file_data == b'':
 				break
 			if self.transfer_type == 'A':
@@ -282,16 +234,16 @@ class ftp_session:
 		self.data_socket.close()
 		if self.verbose:
 			print("%d bytes received in %f seconds (%.2f b/s)."
-				%(filesize, elapsed_time, ftp_session.calculate_data_rate(filesize, elapsed_time)))
+				%(filesize, elapsed_time, FtpSession.calculate_data_rate(filesize, elapsed_time)))
 
 	@ftp_command
 	def put(self, args):
-		'''	usage: get path-to-file '''
+		"""	usage: get path-to-file """
 		if len(args) != 1:
-			ftp_session.print_usage()
+			FtpSession.print_usage()
 			return
 		path = args[0]
-		filename, file_ext = ftp_session.get_file_info(path)
+		filename, file_ext = FtpSession.get_file_info(path)
 		# If transfer type is not set, send TYPE command depending on the type of the file
 		# (TYPE A for ascii files and TYPE I for binary files)
 		transfer_type = self.transfer_type
@@ -312,7 +264,7 @@ class ftp_session:
 		filesize = 0
 		curr_time = time.time()
 		while True:
-			file_data = f.read(ftp_session.READ_BLOCK_SIZE)
+			file_data = f.read(FtpSession.READ_BLOCK_SIZE)
 			if file_data == b'':
 				break
 			if self.transfer_type == 'A':
@@ -325,7 +277,7 @@ class ftp_session:
 		self.get_resp()
 		if self.verbose:
 			print("%d bytes sent in %f seconds (%.2f b/s)."
-				%(filesize, elapsed_time, ftp_session.calculate_data_rate(filesize, elapsed_time)))
+				%(filesize, elapsed_time, FtpSession.calculate_data_rate(filesize, elapsed_time)))
 
 	def get_colored_ls_data(self, ls_data):
 		lines = ls_data.split('\r\n')
@@ -360,11 +312,11 @@ class ftp_session:
 
 		return "\r\n".join(colored_lines)
 
-	'''	usage: ls [dirname] '''
 	@ftp_command
 	def ls(self, args):
+		"""	usage: ls [dirname] """
 		if len(args) > 1:
-			ftp_session.print_usage()
+			FtpSession.print_usage()
 			return
 		filename = ''
 		if len(args) == 1:
@@ -383,7 +335,7 @@ class ftp_session:
 
 		ls_data = ''
 		while True:
-			ls_data_ = self.data_socket.recv(ftp_session.READ_BLOCK_SIZE).decode('ascii')
+			ls_data_ = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE).decode('ascii')
 			if ls_data_ == '':
 				break
 			ls_data += ls_data_
@@ -407,11 +359,9 @@ class ftp_session:
 
 	@ftp_command
 	def cd(self, args):
-		'''
-			usage: cd [dirname]
-		'''
+		""" usage: cd [dirname] """
 		if len(args) > 1:
-			ftp_session.print_usage()
+			FtpSession.print_usage()
 			return
 		path = None
 		if len(args) == 1:
@@ -429,11 +379,9 @@ class ftp_session:
 
 	@ftp_command
 	def passive(self, args):
-		'''
-			usage: passive [on|off]
-		'''
+		"""	usage: passive[on | off] """
 		if len(args) > 1:
-			ftp_session.print_usage()
+			FtpSession.print_usage()
 			return
 		if len(args) == 0:
 			self.passive = not self.passive
@@ -443,7 +391,7 @@ class ftp_session:
 			elif args[0] == 'off':
 				self.passive = False
 			else:
-				ftp_session.print_usage()
+				FtpSession.print_usage()
 				return
 		print("passive %s" % ('on' if self.passive else 'off'))
 
@@ -453,7 +401,7 @@ class ftp_session:
 			usage: verbose [on|off]
 		'''
 		if len(args) > 1:
-			ftp_session.print_usage()
+			FtpSession.print_usage()
 			return
 		if len(args) == 0:
 			self.verbose = not self.verbose
@@ -463,7 +411,7 @@ class ftp_session:
 			elif args[0] == 'off':
 				self.verbose = False
 			else:
-				ftp_session.print_usage()
+				FtpSession.print_usage()
 				return
 		print("verbose %s" % ('on' if self.verbose else 'off'))
 
@@ -478,7 +426,7 @@ class ftp_session:
 			usage: user username
 		'''
 		if len(args) != 1:
-			ftp_session.print_usage()
+			FtpSession.print_usage()
 			return
 
 		username = args[0]
@@ -547,8 +495,8 @@ class ftp_session:
 		raise quit_error
 
 	def run_command(self, cmd_line):
-		''' run a single ftp command received from the ftp_cli module.
-		'''
+		""" run a single ftp command received from the ftp_cli module.
+		"""
 		if cmd_line[0] == '!':
 			subprocess.call(cmd_line[1:], shell=True)
 			return
@@ -556,17 +504,66 @@ class ftp_session:
 		cmd = cmd_line[0]
 		cmd_args = cmd_line[1:]
 
-		if hasattr(ftp_session, cmd):
+		if hasattr(FtpSession, cmd):
 			if not self.logged_in and (cmd != 'user' and cmd != 'quit'):
 				print("Not logged in. Please login first with USER and PASS.")
 				return
-			getattr(ftp_session, cmd)(self, cmd_args)
+			getattr(FtpSession, cmd)(self, cmd_args)
 		else:
 			raise cmd_not_implemented_error
 
 
+def ftp_command(f):
+	f.ftp_command = True
+	return f
+
+
+def check_args(f):
+	def new_f(*args, **kwargs):
+		if hasattr(f, '__doc__'):
+			doc = f.__doc__.split('\n')
+			doc_ = None
+			for line in doc:
+				p = line.find('usage:')
+				if p != -1:
+					doc_ = line[p + 6:]
+					break
+			if doc_:
+				n_args = len(doc_.split()) - 1
+				print(n_args, args, kwargs)
+				assert n_args == len(args[1]), \
+					"%s expects %d arguments, %d given.\nusage: %s" % (new_f.__code__.co_name, n_args, len(args[1]), doc_)
+				f(*args, **kwargs)
+
+	return new_f
+
+# Type of data transfer on the data channel
+class transfer_type:
+	list = 1
+	file = 2
+
+class LsColors:
+	HEADER = '\033[95m'
+	OKBLUE = '\033[94m'
+	OKGREEN = '\033[92m'
+	WARNING = '\033[93m'
+	FAIL = '\033[91m'
+	ENDC = '\033[0m'
+	BOLD = '\033[1m'
+	UNDERLINE = '\033[4m'
+
+	regex = re.compile(r'\*\.(.+)=(.+)')
+	output = subprocess.check_output(['echo $LS_COLORS'], shell=True)
+	d = {}
+	if output:
+		output = str(output).split(':')
+		for i in output:
+			m = regex.match(i)
+			if m:
+				d[m.group(1)] = ('\033[%sm' % m.group(2))
+
 if __name__ == '__main__':
-	ftp = ftp_session("172.18.2.169", 21)
+	ftp = FtpSession("172.18.2.169", 21)
 	#try:
 	ftp.login("anonymous", "p")
 	ftp.ls("upload")
@@ -575,3 +572,10 @@ if __name__ == '__main__':
 	#print("login failed.")
 
 	ftp.session_close()
+
+'''
+TODO:
+- Add mkdir, rm, rmdir, mv, status, user, pass, site, active(port), lcd, chmod, cat, help, put (use lftp syntax)
+- Add command completion using tab based on method documents
+- Add history search using arrow key
+'''

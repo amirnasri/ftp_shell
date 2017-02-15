@@ -1,9 +1,11 @@
-'''
-Handle responses from the server to ftp raw commands.
-'''
+"""
+ftp raw command module.
+
+This module is used by ftp_session module to  handle parsed
+ responses from the server to raw ftp commands.
+"""
 
 from enum import Enum
-
 class protocol_error(Exception): pass
 
 class Transfer(object):

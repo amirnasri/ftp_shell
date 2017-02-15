@@ -79,7 +79,7 @@ class FtpCli:
             if self.first_attempt:
                 self.first_attempt = False
                 server, port, server_path, username, password = self.proc_input_args()
-                self.ftp = ftp_session.ftp_session(server, port)
+                self.ftp = ftp_session.FtpSession(server, port)
                 try:
                     self.ftp.login(username, password, server_path)
                 except login_error:
@@ -113,7 +113,7 @@ class FtpCli:
 
 def get_ftp_commands():
     l = []
-    for k, v in ftp_session.ftp_session.__dict__.items() :
+    for k, v in ftp_session.FtpSession.__dict__.items() :
         if type(v) == types.FunctionType and hasattr(v, 'ftp_command'):
             l.append(k)
     return l
