@@ -5,15 +5,12 @@ This module provides FtpSession class which is
 used by ftp_cli to establish a session with the ftp server and
  start the communication.
 """
-import socket
-import time
 from .ftp_raw import FtpRawRespHandler as FtpRaw, raw_command_error
 from .ftp_parser import parse_response_error
 from .ftp_parser import ftp_client_parser
-import inspect
-import subprocess
-import re
-import sys
+import sys, os, re, subprocess, inspect
+import socket
+import time
 import getpass
 
 class network_error(Exception): pass
@@ -267,15 +264,19 @@ class FtpSession:
 
 	@ftp_command
 	def put(self, args):
-		"""	usage: get path-to-file """
+		"""	usage: put local-file(s) """
 		if len(args) != 1:
 			FtpSession.print_usage()
 			return
 		path = args[0]
 		filename, file_ext = FtpSession.get_file_info(path)
-		try:
+		if os.path.isfile(filename):
 			f = open(filename, "rb")
-		except FileNotFoundError:
+		elif os.path.isdir(filename):
+			file_list = []
+			for root, dirnames, filenames in os.walk(path):
+				file_list.extend([os.path.join(root, f) for f in filenames])
+		else:
 			print("put: cannot access local file '%s'. No such file or directory." % filename, file=sys.stdout)
 			return
 
