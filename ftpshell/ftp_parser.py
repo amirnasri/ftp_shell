@@ -23,7 +23,10 @@ class response:
     def process_newline(self, newline):
         if not self.multiline:
             # Only the first line of response comes here (for both single-line and multi-line responses).
-            resp_code = int(newline[:3])
+            try:
+                resp_code = int(newline[:3])
+            except ValueError:
+                raise parse_response_error
             if (resp_code > 100 and resp_code < 600 and
                     (chr(newline[3]) == ' ' or chr(newline[3]) == '-')):
                 self.resp_code = resp_code

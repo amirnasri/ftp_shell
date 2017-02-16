@@ -7,7 +7,7 @@ used by ftp_cli to establish a session with the ftp server and
 """
 import socket
 import time
-from .ftp_raw import FtpRawRespHandler as FtpRaw
+from .ftp_raw import FtpRawRespHandler as FtpRaw, raw_command_error
 from .ftp_parser import parse_response_error
 from .ftp_parser import ftp_client_parser
 import inspect
@@ -16,12 +16,16 @@ import re
 import sys
 import getpass
 
-class ftp_error(Exception): pass
-class cmd_not_implemented_error(ftp_error): pass
-class quit_error(ftp_error): pass
-class connection_closed_error(ftp_error): pass
-class login_error(ftp_error): pass
+class network_error(Exception): pass
+class cmd_not_implemented_error(Exception): pass
+class quit_error(Exception): pass
+class connection_closed_error(Exception): pass
+class login_error(Exception): pass
 class response_error(Exception): pass
+
+def ftp_command(f):
+	f.ftp_command = True
+	return f
 
 class FtpSession:
 	"""
@@ -59,9 +63,10 @@ class FtpSession:
 	def connect_server(self, server, port):
 		try:
 			self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+			self.client.settimeout(10)
 			self.client.connect((server, port))
 		except socket.error:
-			print("Could not connect to the server.")
+			print("Could not connect to the server.", file=sys.stdout)
 		else:
 			self.connected = True
 
@@ -80,7 +85,7 @@ class FtpSession:
 			try:
 				resp = self.parser.get_resp(s, self.verbose)
 			except parse_response_error:
-				print('Error occured while parsing response to ftp command %s\n' % self.cmd, file=sys.stdout)
+				print('Error occurred while parsing response to ftp command %s\n' % self.cmd, file=sys.stdout)
 				self.close_server()
 				raise
 			if resp:
@@ -110,7 +115,10 @@ class FtpSession:
 			pass
 
 	def get_welcome_msg(self):
-		return self.get_resp()
+		try:
+			self.get_resp()
+		except response_error:
+			self.close_server()
 
 	@staticmethod
 	def calculate_data_rate(filesize, seconds):
@@ -162,8 +170,14 @@ class FtpSession:
 		# or Port command (active transfer mode).
 		if self.passive:
 			self.send_raw_command("PASV\r\n")
-			resp = self.get_resp()
+			try:
+				resp = self.get_resp()
+			except response_error:
+				print("PASV command failed.", file=sys.stdout)
+				raise raw_command_error
+
 			data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+			data_socket.settimeout(10)
 			data_socket.connect((resp.trans.server_address, resp.trans.server_port))
 			self.send_raw_command(data_command)
 			self.get_resp()
@@ -173,18 +187,25 @@ class FtpSession:
 			ip = s.getsockname()[0]
 			s.close()
 			if not ip:
-				raise ftp_error("Could not get local IP address.")
+				raise network_error("Could not get local IP address.")
 			data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+			data_socket.settimeout(10)
 			data_socket.bind((ip, 0))
 			data_socket.listen(1)
 			_, port = data_socket.getsockname()
 			if not port:
-				raise ftp_error("Could not get local port.")
+				raise network_error("Could not get local port.")
 
 			port_h = int(port/256)
 			port_l = port - port_h * 256
 			self.send_raw_command("PORT %s\r\n" % (",".join(ip.split('.') + [str(port_h), str(port_l)])))
-			resp = self.get_resp()
+
+			try:
+				resp = self.get_resp()
+			except response_error:
+				print("PORT command failed.", file=sys.stdout)
+				raise raw_command_error
+
 			self.send_raw_command(data_command)
 			resp = self.get_resp()
 			data_socket, address = data_socket.accept()
@@ -210,12 +231,20 @@ class FtpSession:
 			else:
 				transfer_type = 'I'
 		self.send_raw_command("TYPE %s\r\n" % transfer_type)
-		self.get_resp()
+		try:
+			self.get_resp()
+		except response_error:
+			print("TYPE command failed.", file=sys.stdout)
+			return
 
 		if self.verbose:
-			print("Requesting file %s from the ftp server...\n" % filename)
+			print("Requesting file '%s' from the server...\n" % filename)
 
-		self.data_socket = self.setup_data_transfer("RETR %s\r\n" % path)
+		try:
+			self.data_socket = self.setup_data_transfer("RETR %s\r\n" % path)
+		except response_error:
+			print("get: cannot access remote file '%s'. No such file or directory." % filename, file=sys.stdout)
+			return
 
 		f = open(filename, "wb")
 		filesize = 0
@@ -244,6 +273,12 @@ class FtpSession:
 			return
 		path = args[0]
 		filename, file_ext = FtpSession.get_file_info(path)
+		try:
+			f = open(filename, "rb")
+		except FileNotFoundError:
+			print("put: cannot access local file '%s'. No such file or directory." % filename, file=sys.stdout)
+			return
+
 		# If transfer type is not set, send TYPE command depending on the type of the file
 		# (TYPE A for ascii files and TYPE I for binary files)
 		transfer_type = self.transfer_type
@@ -260,7 +295,6 @@ class FtpSession:
 
 		self.data_socket = self.setup_data_transfer("STOR %s\r\n" % path)
 
-		f = open(filename, "rb")
 		filesize = 0
 		curr_time = time.time()
 		while True:
@@ -335,16 +369,19 @@ class FtpSession:
 
 		ls_data = ''
 		while True:
-			ls_data_ = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE).decode('ascii')
+			ls_data_ = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE).decode('utf-8', 'ignore')
 			if ls_data_ == '':
 				break
 			ls_data += ls_data_
+
+		self.data_socket.close()
+		self.get_resp()
+		if len(ls_data) == 0:
+			print("ls: cannot access remote file '%s'. No such directory." % filename, file=sys.stdout)
+			return
+
 		ls_data_colored = self.get_colored_ls_data(ls_data)
 		print(ls_data_colored, end='')
-		self.data_socket.close()
-		if self.verbose:
-			print()
-		self.get_resp()
 
 	@ftp_command
 	def pwd(self, args=None):
@@ -372,7 +409,12 @@ class FtpSession:
 			self.get_resp()
 		else:
 			self.send_raw_command("CWD %s\r\n" % path)
-			self.get_resp()
+			try:
+				self.get_resp()
+			except response_error:
+				print("cd: cannot access remote directory '%s'. No such directory." % path, file=sys.stdout)
+				return
+
 			self.send_raw_command("PWD\r\n")
 			resp = self.get_resp()
 			self.cwd = resp.cwd
@@ -511,12 +553,6 @@ class FtpSession:
 			getattr(FtpSession, cmd)(self, cmd_args)
 		else:
 			raise cmd_not_implemented_error
-
-
-def ftp_command(f):
-	f.ftp_command = True
-	return f
-
 
 def check_args(f):
 	def new_f(*args, **kwargs):

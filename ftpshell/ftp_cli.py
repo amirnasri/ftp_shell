@@ -4,8 +4,6 @@ import socket
 import readline
 import types
 from . import ftp_session
-from .ftp_session import connection_closed_error
-from .ftp_session import response_error
 from .ftp_parser import parse_response_error
 from .ftp_session import login_error
 from .ftp_session import LsColors
@@ -68,7 +66,7 @@ class FtpCli:
                                           self.ftp.server, LsColors.ENDC, LsColors.OKGREEN,
                                               self.ftp.get_cwd(), LsColors.ENDC)
         else:
-            return '-> '
+            return '%s->%s ' % (LsColors.OKGREEN, LsColors.ENDC)
 
     def proc_cli(self):
         """ Create an ftp-session and start by logging to the server
@@ -76,39 +74,37 @@ class FtpCli:
         the command-line and send them to the ftp session for processing.
         """
         while True:
-            if self.first_attempt:
-                self.first_attempt = False
-                server, port, server_path, username, password = self.proc_input_args()
-                self.ftp = ftp_session.FtpSession(server, port)
-                try:
+            try:
+                if self.first_attempt:
+                    self.first_attempt = False
+                    server, port, server_path, username, password = self.proc_input_args()
+                    self.ftp = ftp_session.FtpSession(server, port)
                     self.ftp.login(username, password, server_path)
-                except login_error:
-                    print("Login failed.")
-            else:
-                try:
-                    cmd_line = input(self.get_prompt())
-                    if not cmd_line.strip():
-                        continue
-                    try:
-                        # Delegate processing of input command to the
-                        # ftp session.
-                        self.ftp.run_command(cmd_line)
-                    except response_error:
-                        pass
+                else:
+                        cmd_line = input(self.get_prompt())
+                        if not cmd_line.strip():
+                            continue
 
-                except login_error:
-                    print("Login failed.")
-                except ftp_session.cmd_not_implemented_error:
-                    print("Command not implemented")
-                except (socket.error, connection_closed_error, parse_response_error):
-                    self.ftp.close_server()
-                    print("Connection was closed by the server.")
-                except ftp_session.quit_error:
-                    print("Goodbye.")
-                    break
-                except BaseException:
-                    print("")
-                    break
+                        try:
+                            # Delegate processing of input command to the
+                            # ftp session.
+                            self.ftp.run_command(cmd_line)
+                        except ftp_session.response_error:
+                            pass
+
+            except login_error:
+                print("Login failed.")
+            except ftp_session.cmd_not_implemented_error:
+                print("Command not implemented")
+            except (socket.error, ftp_session.connection_closed_error, parse_response_error, ftp_session.network_error):
+                self.ftp.close_server()
+                print("Connection was closed by the server.")
+            except ftp_session.quit_error:
+                print("Goodbye.")
+                break
+            #except BaseException:
+            #    print("")
+            #    break
 
 
 def get_ftp_commands():
