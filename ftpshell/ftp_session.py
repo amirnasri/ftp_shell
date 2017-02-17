@@ -262,24 +262,7 @@ class FtpSession:
 			print("%d bytes received in %f seconds (%.2f b/s)."
 				%(filesize, elapsed_time, FtpSession.calculate_data_rate(filesize, elapsed_time)))
 
-	@ftp_command
-	def put(self, args):
-		"""	usage: put local-file(s) """
-		if len(args) != 1:
-			FtpSession.print_usage()
-			return
-		path = args[0]
-		filename, file_ext = FtpSession.get_file_info(path)
-		if os.path.isfile(filename):
-			f = open(filename, "rb")
-		elif os.path.isdir(filename):
-			file_list = []
-			for root, dirnames, filenames in os.walk(path):
-				file_list.extend([os.path.join(root, f) for f in filenames])
-		else:
-			print("put: cannot access local file '%s'. No such file or directory." % filename, file=sys.stdout)
-			return
-
+	def upload_file(self):
 		# If transfer type is not set, send TYPE command depending on the type of the file
 		# (TYPE A for ascii files and TYPE I for binary files)
 		transfer_type = self.transfer_type
@@ -313,6 +296,28 @@ class FtpSession:
 		if self.verbose:
 			print("%d bytes sent in %f seconds (%.2f b/s)."
 				%(filesize, elapsed_time, FtpSession.calculate_data_rate(filesize, elapsed_time)))
+
+	@ftp_command
+	def put(self, args):
+		"""	usage: put local-file(s) """
+		#if len(args) != 1:
+		#	FtpSession.print_usage()
+		#	return
+		file_paths = args
+		expanded_file_paths = subprocess.check_output("echo %s" % file_paths, shell=True).strip().split()
+		for file_path in expanded_file_paths:
+
+			if os.path.isfile(file_path):
+				filename, file_ext = FtpSession.get_file_info(file_path)
+				f = open(filename, "rb")
+			elif os.path.isdir(file_path):
+				file_list = []
+				for root, dirnames, filenames in os.walk(file_path):
+					file_list.extend([os.path.join(root, f) for f in filenames])
+			else:
+				print("put: cannot access local file '%s'. No such file or directory." % filename, file=sys.stdout)
+				continue
+
 
 	def get_colored_ls_data(self, ls_data):
 		lines = ls_data.split('\r\n')
