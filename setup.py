@@ -2,7 +2,7 @@ from distutils.core import setup
 
 setup(
     name='ftpshell',
-    version='1.6',
+    version='1.7',
     author='Amir Nasri',
     author_email='amnasri@gmail.com',
     packages=['ftpshell'],

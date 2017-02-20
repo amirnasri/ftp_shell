@@ -7,7 +7,7 @@ from .ftp_parser import parse_response_error
 from .ftp_session import login_error
 from .ftp_session import LsColors
 
-class cli_error(BaseException): pass
+class cli_error(Exception): pass
 
 class FtpCli:
     """ Main class for handling the command-line interface.
@@ -106,9 +106,6 @@ class FtpCli:
             except ftp_session.quit_error:
                 print("Goodbye.")
                 break
-            except BaseException as e:
-                print("Received unpexpected exception '%s'. Closing the session." % e.__class__.__name__)
-                break
 
 class Completer(object):
     """ Class to provide tab-completion functionality
@@ -157,6 +154,8 @@ def main():
         cli.proc_cli()
     except cli_error:
         pass
+    except BaseException as e:
+        print("Received unpexpected exception '%s'. Closing the session." % e.__class__.__name__)
 
 if __name__ == '__main__':
     main()
