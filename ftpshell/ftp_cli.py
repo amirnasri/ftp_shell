@@ -94,16 +94,21 @@ class FtpCli:
             except login_error:
                 print("Login failed.")
             except ftp_session.cmd_not_implemented_error:
-                print("Command not implemented")
+                print("Command not recognized. Please use 'help' to see a list of available commands.")
             except (socket.error, ftp_session.connection_closed_error, parse_response_error, ftp_session.network_error):
                 self.ftp.close_server()
                 print("Connection was closed by the server.")
+            except KeyboardInterrupt:
+                break
+            except EOFError:
+                print()
+                break
             except ftp_session.quit_error:
                 print("Goodbye.")
                 break
-            #except BaseException:
-            #    print("")
-            #    break
+            except BaseException as e:
+                print("Received unpexpected exception '%s'. Closing the session." % e.__class__.__name__)
+                break
 
 class Completer(object):
     """ Class to provide tab-completion functionality
@@ -150,8 +155,6 @@ def main():
     cli = FtpCli()
     try:
         cli.proc_cli()
-    except (EOFError, KeyboardInterrupt):
-        print("")
     except cli_error:
         pass
 

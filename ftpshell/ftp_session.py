@@ -646,8 +646,12 @@ class FtpSession:
 		if len(args) == 1:
 			self.print_usage(args[0])
 		elif len(args) == 0:
-			for cmd in FtpSession.get_ftp_commands():
-				self.print_usage(cmd)
+			print("The following is a list of available commands:")
+			for i, cmd in enumerate(sorted(FtpSession.get_ftp_commands())):
+				print("%-20s" % cmd, end = "")
+				if (i + 1) % 4 == 0:
+					print()
+			print()
 		else:
 			FtpSession.print_usage()
 
@@ -726,7 +730,8 @@ if __name__ == '__main__':
 
 '''
 TODO:
-- Add mkdir, rm, rmdir, mv, status, user, pass, site, active(port), lcd, chmod, cat, help, put (use lftp syntax)
+- Add mv, status, site, active(port), chmod, cat (use lftp syntax)
+- Add recursive directory download support and wildcard expansion for get
 - Add command completion using tab based on method documents
 - Add history search using arrow key
 '''
