@@ -8,9 +8,9 @@ Installation
 Usage
 ================
 After the installation, ftpshell script is installed in `/usr/local/bin` and can be 
-used as:
+invoked using:
          
-        ftpshell [username[:password]@]server[:port]
+    ftpshell [username[:password]@]server[:port]
         
 Screenshot
 ================
