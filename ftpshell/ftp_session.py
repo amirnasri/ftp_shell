@@ -11,6 +11,7 @@ from .ftp_parser import ftp_client_parser
 import sys, os, re, subprocess, inspect
 import socket
 import time
+import types
 import getpass
 
 class network_error(Exception): pass
@@ -122,8 +123,9 @@ class FtpSession:
 		return filesize/seconds
 
 	@classmethod
-	def print_usage(cls):
-		fname = inspect.stack()[1][3]
+	def print_usage(cls, fname = None):
+		if not fname:
+			fname = inspect.stack()[1][3]
 		if hasattr(cls, fname):
 			doc = getattr(getattr(cls, fname), '__doc__', None)
 			if doc:
@@ -262,22 +264,32 @@ class FtpSession:
 			print("%d bytes received in %f seconds (%.2f b/s)."
 				%(filesize, elapsed_time, FtpSession.calculate_data_rate(filesize, elapsed_time)))
 
-	def upload_file(self):
+	def _upload_file(self, filename):
+		f = open(filename, "rb")
 		# If transfer type is not set, send TYPE command depending on the type of the file
 		# (TYPE A for ascii files and TYPE I for binary files)
 		transfer_type = self.transfer_type
+		_, file_ext = FtpSession.get_file_info(filename)
 		if transfer_type is None:
 			if file_ext != '' and file_ext in self.text_file_extensions:
 				transfer_type = 'A'
 			else:
 				transfer_type = 'I'
 		self.send_raw_command("TYPE %s\r\n" % transfer_type)
-		self.get_resp()
+		try:
+			self.get_resp()
+		except response_error:
+			print("TYPE command failed.", file=sys.stdout)
+			return
 
 		if self.verbose:
-			print("Sending file %s to the ftp server...\n" % filename)
+			print("Uploading file %s to the ftp server...\n" % filename)
 
-		self.data_socket = self.setup_data_transfer("STOR %s\r\n" % path)
+		try:
+			self.data_socket = self.setup_data_transfer("STOR %s\r\n" % filename)
+		except response_error:
+			print("put: could not upload '%s'." % filename, file=sys.stdout)
+			return
 
 		filesize = 0
 		curr_time = time.time()
@@ -297,27 +309,30 @@ class FtpSession:
 			print("%d bytes sent in %f seconds (%.2f b/s)."
 				%(filesize, elapsed_time, FtpSession.calculate_data_rate(filesize, elapsed_time)))
 
+	def upload_file(self, filename):
+		if os.path.isfile(filename):
+			self._upload_file(filename)
+		elif os.path.isdir(filename):
+			for root, dirnames, filenames in os.walk(filename):
+				if root:
+					self.send_raw_command("MKD %s\r\n" % root)
+					try:
+						self.get_resp()
+					except response_error:
+						print("put: cannot create remote directory '%s'." % root, file=sys.stdout)
+						return
+				for f in filenames:
+					self._upload_file(os.path.join(root, f))
+		else:
+			print("put: cannot access local file '%s'. No such file or directory." % filename, file=sys.stdout)
+
 	@ftp_command
 	def put(self, args):
 		"""	usage: put local-file(s) """
-		#if len(args) != 1:
-		#	FtpSession.print_usage()
-		#	return
-		file_paths = args
-		expanded_file_paths = subprocess.check_output("echo %s" % file_paths, shell=True).strip().split()
-		for file_path in expanded_file_paths:
-
-			if os.path.isfile(file_path):
-				filename, file_ext = FtpSession.get_file_info(file_path)
-				f = open(filename, "rb")
-			elif os.path.isdir(file_path):
-				file_list = []
-				for root, dirnames, filenames in os.walk(file_path):
-					file_list.extend([os.path.join(root, f) for f in filenames])
-			else:
-				print("put: cannot access local file '%s'. No such file or directory." % filename, file=sys.stdout)
-				continue
-
+		filenames = args
+		expanded_filenames = subprocess.check_output("echo %s" % " ".join(filenames), shell=True).strip().split()
+		for filename in expanded_filenames:
+			self.upload_file(filename.decode("utf-8"))
 
 	def get_colored_ls_data(self, ls_data):
 		lines = ls_data.split('\r\n')
@@ -352,27 +367,11 @@ class FtpSession:
 
 		return "\r\n".join(colored_lines)
 
-	@ftp_command
-	def ls(self, args):
-		"""	usage: ls [dirname] """
-		if len(args) > 1:
-			FtpSession.print_usage()
-			return
-		filename = ''
-		if len(args) == 1:
-			filename = args[0]
-
-		'''
-		self.send_raw_command("PASV\r\n")
-		resp = self.get_resp()
-		data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		data_socket.connect((resp.trans.server_address, resp.trans.server_port))
-		'''
+	def _ls(self, filename, verbose):
+		save_verbose = self.verbose
+		self.verbose = verbose
 		data_command = "LIST %s\r\n" % filename
 		self.data_socket = self.setup_data_transfer(data_command)
-		if not self.data_socket:
-			return
-
 		ls_data = ''
 		while True:
 			ls_data_ = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE).decode('utf-8', 'ignore')
@@ -382,8 +381,31 @@ class FtpSession:
 
 		self.data_socket.close()
 		self.get_resp()
-		if len(ls_data) == 0:
-			print("ls: cannot access remote file '%s'. No such directory." % filename, file=sys.stdout)
+		self.verbose = save_verbose
+		return ls_data
+
+	@ftp_command
+	def ls(self, args):
+		"""	usage: ls [dirname] """
+		if len(args) > 1:
+			FtpSession.print_usage()
+			return
+		filename = ''
+		if len(args) == 1:
+			filename = args[0]
+		try:
+			ls_data = self._ls(filename, self.verbose)
+		except response_error:
+			if self.data_socket:
+				self.data_socket.close()
+			print("ls: cannot access remote directory '%s'. No such file or directory." % filename, file=sys.stdout)
+			return
+
+		if filename and not ls_data:
+			try:
+				list(map(lambda x: x.split()[-1] if x else x, self._ls(os.path.dirname(filename), False).split('\r\n'))).index(filename)
+			except ValueError:
+				print("ls: cannot access remote directory '%s'. No such directory." % filename, file=sys.stdout)
 			return
 
 		ls_data_colored = self.get_colored_ls_data(ls_data)
@@ -426,6 +448,22 @@ class FtpSession:
 			self.cwd = resp.cwd
 
 	@ftp_command
+	def lcd(self, args):
+		""" usage: lcd [local-dirname] """
+		if len(args) > 1:
+			FtpSession.print_usage()
+			return
+		path = None
+		if len(args) == 1:
+			path = args[0]
+
+		if path:
+			try:
+				os.chdir(path)
+			except FileNotFoundError:
+				print("lcd: cannot access local directory '%s'. No such directory." % path, file=sys.stdout)
+
+	@ftp_command
 	def passive(self, args):
 		"""	usage: passive[on | off] """
 		if len(args) > 1:
@@ -464,9 +502,60 @@ class FtpSession:
 		print("verbose %s" % ('on' if self.verbose else 'off'))
 
 	@ftp_command
-	def mkdir(self, dirname):
+	def mkdir(self, args):
+		"""	usage: mkdir remote-directory
+		"""
+		if len(args) > 1 or len(args) == 0:
+			FtpSession.print_usage()
+			return
+		dirname = args[0]
 		self.send_raw_command("MKD %s\r\n" % dirname)
-		self.get_resp()
+		try:
+			self.get_resp()
+		except response_error:
+			print("mkdir: cannot create remote directory '%s'." % dirname, file=sys.stdout)
+			return
+
+	def _rm(self, filename, isdir):
+		if isdir:
+			ls_data = self._ls(filename, False)
+			ls_lines = [line for line in ls_data.split('\r\n') if len(line) != 0]
+			for ls_line in ls_lines:
+				self._rm(os.path.join(filename, ls_line.split()[-1]), ls_line[0] == 'd')
+			self.send_raw_command("RMD %s\r\n" % filename.split()[-1])
+			self.get_resp()
+		else:
+			self.send_raw_command("DELE %s\r\n" % filename)
+			self.get_resp()
+
+	@ftp_command
+	def rm(self, args):
+		"""	usage: mkdir remote-file(s)
+		"""
+		if len(args) == 0:
+			FtpSession.print_usage()
+			return
+		for filename in args:
+			try:
+				ls_data = self._ls(filename, False)
+			except response_error:
+			   	continue
+			isfile = False
+			ls_lines = [line for line in ls_data.split('\r\n') if len(line) != 0]
+			if len(ls_lines) == 1:
+				ls_words = ls_lines[0].split()
+				if ls_words[0] and ls_words[0][0] == '-' \
+						and ls_words[-1].strip() == filename:
+					isfile = True
+			try:
+				if not isfile:
+					resp = input("rm: '%s' is a directory. Are you sure you want to remove it? (y/[n])" % filename)
+					if (resp == 'y'):
+						self._rm(filename, True)
+				else:
+					self._rm(filename, False)
+			except response_error:
+				print("rm: cannot delete remote directory '%s'." % filename, file=sys.stdout)
 
 	@ftp_command
 	def user(self, args):
@@ -541,6 +630,26 @@ class FtpSession:
 	@ftp_command
 	def quit(self, args):
 		raise quit_error
+
+	@staticmethod
+	def get_ftp_commands():
+		l = []
+		for k, v in FtpSession.__dict__.items():
+			if type(v) == types.FunctionType and hasattr(v, 'ftp_command'):
+				l.append(k)
+		return l
+
+	@ftp_command
+	def help(self, args):
+		"""	usage: help command-name
+		"""
+		if len(args) == 1:
+			self.print_usage(args[0])
+		elif len(args) == 0:
+			for cmd in FtpSession.get_ftp_commands():
+				self.print_usage(cmd)
+		else:
+			FtpSession.print_usage()
 
 	def run_command(self, cmd_line):
 		""" run a single ftp command received from the ftp_cli module.

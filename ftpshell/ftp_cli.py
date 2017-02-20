@@ -2,7 +2,6 @@ import os
 import sys
 import socket
 import readline
-import types
 from . import ftp_session
 from .ftp_parser import parse_response_error
 from .ftp_session import login_error
@@ -106,14 +105,6 @@ class FtpCli:
             #    print("")
             #    break
 
-
-def get_ftp_commands():
-    l = []
-    for k, v in ftp_session.FtpSession.__dict__.items() :
-        if type(v) == types.FunctionType and hasattr(v, 'ftp_command'):
-            l.append(k)
-    return l
-
 class Completer(object):
     """ Class to provide tab-completion functionality
     to the command line.
@@ -153,7 +144,7 @@ class Completer(object):
 
 def main():
     # Setup readline to provide tab completion for the command line.
-    readline.set_completer(Completer(get_ftp_commands()).complete)
+    readline.set_completer(Completer(ftp_session.FtpSession.get_ftp_commands()).complete)
     readline.parse_and_bind('tab: complete')
 
     cli = FtpCli()
