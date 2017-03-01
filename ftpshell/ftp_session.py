@@ -369,9 +369,11 @@ class FtpSession:
 
 		return "\r\n".join(colored_lines)
 
-	def _ls(self, filename, verbose):
+	def _ls(self, filename = None, verbose = False):
 		save_verbose = self.verbose
 		self.verbose = verbose
+		if filename is None:
+			filename = ""
 		data_command = "LIST %s\r\n" % filename
 		self.data_socket = self.setup_data_transfer(data_command)
 		ls_data = ''
@@ -530,6 +532,16 @@ class FtpSession:
 			self.send_raw_command("DELE %s\r\n" % filename)
 			self.get_resp()
 
+	def isdir(self, filename):
+		ls_data = self._ls(filename, False)
+		ls_lines = [line for line in ls_data.split('\r\n') if len(line) != 0]
+		if len(ls_lines) == 1:
+			ls_words = ls_lines[0].split()
+			if ls_words[0] and ls_words[0][0] == '-' \
+					and ls_words[-1].strip() == filename:
+				return True
+		return False
+
 	@ftp_command
 	def rm(self, args):
 		"""	usage: mkdir remote-file(s)
@@ -539,16 +551,9 @@ class FtpSession:
 			return
 		for filename in args:
 			try:
-				ls_data = self._ls(filename, False)
+				isfile = self.isdir(filename)
 			except response_error:
-			   	continue
-			isfile = False
-			ls_lines = [line for line in ls_data.split('\r\n') if len(line) != 0]
-			if len(ls_lines) == 1:
-				ls_words = ls_lines[0].split()
-				if ls_words[0] and ls_words[0][0] == '-' \
-						and ls_words[-1].strip() == filename:
-					isfile = True
+				continue
 			try:
 				if not isfile:
 					resp = input("rm: '%s' is a directory. Are you sure you want to remove it? (y/[n])" % filename)
