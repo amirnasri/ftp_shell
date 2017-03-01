@@ -8,6 +8,8 @@ used by ftp_cli to establish a session with the ftp server and
 from .ftp_raw import FtpRawRespHandler as FtpRaw, raw_command_error
 from .ftp_parser import parse_response_error
 from .ftp_parser import ftp_client_parser
+from .ftp_fuse import FtpFuse
+from fuse import FUSE
 import sys, os, re, subprocess, inspect
 import socket
 import time
@@ -626,6 +628,10 @@ class FtpSession:
 			self.cd([server_path])
 		self.username = username
 		self.logged_in = True
+
+		print("Running fuse!")
+		mountpoint = "/home/amir/.ftpshell"
+		FUSE(FtpFuse(self), mountpoint, nothreads=True, foreground=True)
 
 	@ftp_command
 	def quit(self, args):
