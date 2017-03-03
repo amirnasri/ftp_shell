@@ -533,12 +533,14 @@ class FtpSession:
 			self.get_resp()
 
 	def isdir(self, filename):
+		if not filename or filename[-1] == "/":
+			return True
 		ls_data = self._ls(filename, False)
 		ls_lines = [line for line in ls_data.split('\r\n') if len(line) != 0]
 		if len(ls_lines) == 1:
 			ls_words = ls_lines[0].split()
 			if ls_words[0] and ls_words[0][0] == '-' \
-					and ls_words[-1].strip() == filename:
+					and ls_words[-1].strip() == os.path.basename(filename):
 				return True
 		return False
 
