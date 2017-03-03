@@ -376,10 +376,10 @@ class FtpSession:
 			filename = ""
 		data_command = "LIST %s\r\n" % filename
 		self.data_socket = self.setup_data_transfer(data_command)
-		ls_data = ''
+		ls_data = ""
 		while True:
 			ls_data_ = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE).decode('utf-8', 'ignore')
-			if ls_data_ == '':
+			if ls_data_ == "":
 				break
 			ls_data += ls_data_
 
@@ -394,7 +394,7 @@ class FtpSession:
 		if len(args) > 1:
 			FtpSession.print_usage()
 			return
-		filename = ''
+		filename = ""
 		if len(args) == 1:
 			filename = args[0]
 		try:
