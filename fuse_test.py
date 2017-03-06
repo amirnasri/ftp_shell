@@ -128,6 +128,7 @@ class Passthrough(Operations):
         return self.flush(path, fh)
 
 def main(mountpoint, root):
+    print("mp=%s, root=%s" % (mountpoint, root))
     FUSE(A(root), mountpoint, nothreads=True, foreground=True)
 
 

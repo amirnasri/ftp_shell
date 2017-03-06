@@ -26,7 +26,7 @@ class FtpCli:
         """ Parse command arguments and use them to start a
         ftp session.
         """
-        if len(sys.argv) != 2:
+        if len(sys.argv) < 2:
             print('Usage: ftpshell [username[:password]@]server[:port]')
             raise cli_error
 
@@ -154,8 +154,8 @@ def main():
         cli.proc_cli()
     except cli_error:
         pass
-    except BaseException as e:
-        print("Received unpexpected exception '%s'. Closing the session." % e.__class__.__name__)
+    #except BaseException as e:
+    #    print("Received unpexpected exception '%s'. Closing the session." % e.__class__.__name__)
 
 if __name__ == '__main__':
     main()

@@ -1,22 +1,25 @@
 "This module provides connection with fusepy module."
 import os, stat
 from fuse import FUSE, FuseOSError, Operations
+import threading
 
-class FileStat(object):
-	def __init__(self, mode, nlink, uid, gid, size, mtime):
-		self.mode = mode
-		self.nlink = nlink
-		self.uid = uid
-		self.gid = gid
-		self.size = size
-		self.mtime = mtime
+threadLock = threading.Lock()
+
+def syncrnoize(f):
+	def new_f(*args, **kwargs):
+		print("#########acquireing lock")
+		threadLock.acquire()
+		ret = f(*args, **kwargs)
+		threadLock.release()
+		print("#########released lock")
+		return ret
+	return new_f
 
 class FtpFuse(Operations):
 	file_mode_table = dict((k, v) for v, k in stat._filemode_table[0])
 
 	def __init__(self, ftp_session):
 		self.fs = ftp_session
-
 
 	def readdir(self, path, fh):
 		print("readdir path=%s, fh=%d" % (path, fh))
@@ -31,30 +34,56 @@ class FtpFuse(Operations):
 	@staticmethod
 	def parse_ls_line(line):
 		fields = line.split()
-		mode = FtpFuse.get_file_mode(fields[0])
-		mtime = 0
-		return fields[-1], FileStat(mode, int(fields[1]), fields[2], fields[3], int(fields[4]), mtime)
+		file_stat = dict()
+		file_stat["st_mode"] = FtpFuse.get_file_mode(fields[0])
+		file_stat["st_mtime"] = 0
+		file_stat["st_nlink"] = int(fields[1])
+		file_stat["st_uid"] = fields[2]
+		file_stat["st_giu"] = fields[3]
+		file_stat["st_size"] = int(fields[4])
+		return fields[-1], file_stat
 
 	@staticmethod
 	def parse_ls_data(ls_data):
-		ls_lines = [l for l in ls_data.split("/r/n") if len(l) > 0]
+		ls_lines = [l for l in ls_data.split("\r\n") if len(l) > 0]
+		print(ls_lines)
 		ls_info = dict()
 		for l in ls_lines:
-			name, fs = FtpFuse.parse_ls_line(l)
-			ls_info[name] = fs
+			filename, file_stat = FtpFuse.parse_ls_line(l)
+			ls_info[filename] = file_stat
 		return ls_info
 
+	@syncrnoize
 	def getattr(self, path, fh=None):
-		print("getattr path=%s, fh=%d" % (path, -1 if fh is None else fh))
+		print("=============getattr path=%s, fh=" % (path) + str(fh))
+		file_stat = dict()
 		if path is None or path[0] != "/":
-			return dict()
-		path = path[1:]
-		if path and path[-1] == "/":
+			return file_stat
+		cwd = self.fs.get_cwd()
+		print("cwd=" + cwd)
+		path = cwd + path
+		if path[-1] == "/":
 			path = path[:-1]
-		if self.fs.isdir(path):
-			ls_data = self.ftp_session._ls(os.path.dirname(path))
+		print(path, self.fs.isdir(path))
+		dirname = ""
+		#isdir = self.fs.isdir(path)
+		isdir = True
+		if isdir:
+			dirname = os.path.dirname(path)
+			ls_data = self.fs._ls(dirname)
 		else:
-			ls_data = self.ftp_session._ls(path)
-		return dict()
+			ls_data = self.fs._ls(path)
+		print(ls_data)
+		ls_info = FtpFuse.parse_ls_data(ls_data)
+		print(ls_info)
+		try:
+			if isdir:
+				file_stat = ls_info[path]
+			else:
+				file_stat = ls_info[dirname]
+		except KeyError:
+			pass
+		print("=============getattr ends!")
+		return file_stat
 
 

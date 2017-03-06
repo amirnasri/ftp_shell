@@ -44,7 +44,7 @@ class response:
     def process_string(self, s):
         """ Parse a string received from the server into lines
         and then process each line. """
-        while True:
+        while not self.is_complete:
             # TODO: change '\r\n' to '\r*\n'
             rn_pos = s.find(b'\r\n')
             if (rn_pos == -1):
@@ -55,11 +55,11 @@ class response:
             self.lines.append(newline)
         return s
 
-    def print_resp(self):
-        for l in self.lines:
-            print(l.decode('ascii'), end = '')
-        print("")
+    def __repr__(self):
+        return "".join([l.decode('ascii') for l in self.lines])
 
+    def __str__(self):
+        return self.__repr__()
 
 class ftp_resp_type(Enum):
     interm = 1
@@ -86,7 +86,7 @@ class ftp_client_parser:
         if resp.is_complete:
             resp.type = ftp_resp_type(int(resp.resp_code / 100))
             if verbose:
-                resp.print_resp()
+                print(resp)
             self.resp = None
             return resp
         return None

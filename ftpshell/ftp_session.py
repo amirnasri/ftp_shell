@@ -15,6 +15,7 @@ import socket
 import time
 import types
 import getpass
+import threading
 
 class network_error(Exception): pass
 class cmd_not_implemented_error(Exception): pass
@@ -22,6 +23,7 @@ class quit_error(Exception): pass
 class connection_closed_error(Exception): pass
 class login_error(Exception): pass
 class response_error(Exception): pass
+class transfer_complete(Exception): pass
 
 def ftp_command(f):
 	f.ftp_command = True
@@ -92,7 +94,7 @@ class FtpSession:
 				if self.parser.resp_failed(resp):
 					raise response_error
 				break
-
+		print("got resp: \n" + str(resp))
 		resp_handler = FtpRaw.get_resp_handler(self.cmd)
 		if resp_handler is not None:
 			resp_handler(resp)
@@ -167,6 +169,8 @@ class FtpSession:
 		return filename, file_ext
 
 	def setup_data_transfer(self, data_command):
+		import inspect
+		print("callding setup data transfer " + str(data_command) + "called by " + inspect.stack()[1][3])
 		# To prepare for data transfer, Send PASV (passive transfer mode)
 		# or Port command (active transfer mode).
 		if self.passive:
@@ -181,7 +185,11 @@ class FtpSession:
 			data_socket.settimeout(10)
 			data_socket.connect((resp.trans.server_address, resp.trans.server_port))
 			self.send_raw_command(data_command)
-			self.get_resp()
+			#thread1 = FtpSession.myThread("Thread-1", self, data_socket, data_command, resp)
+			#thread1.start()
+			resp = self.get_resp()
+			#thread1.join()
+			print("resp.resp_code = " + str(resp.resp_code))
 		else:
 			s = socket.socket()
 			s.connect(("8.8.8.8", 80))
@@ -369,22 +377,42 @@ class FtpSession:
 
 		return "\r\n".join(colored_lines)
 
+	class myThread(threading.Thread):
+		def __init__(self, name, data_socket):
+			threading.Thread.__init__(self)
+			self.name = name
+			self.data_socket = data_socket
+			self.ls_data = ""
+
+		def run(self):
+			print("Starting " + self.name)
+			try:
+				ls_data = ""
+				while True:
+					ls_data_ = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE).decode('utf-8', 'ignore')
+					if ls_data_ == "":
+						break
+					ls_data += ls_data_
+				print(ls_data)
+				self.ls_data = ls_data
+			except BaseException as e:
+			    print("Received unpexpected exception '%s'." % e.__class__.__name__)
+			print("Exiting " + self.name)
+
 	def _ls(self, filename = None, verbose = False):
+		verbose = True
 		save_verbose = self.verbose
 		self.verbose = verbose
 		if filename is None:
 			filename = ""
 		data_command = "LIST %s\r\n" % filename
 		self.data_socket = self.setup_data_transfer(data_command)
-		ls_data = ""
-		while True:
-			ls_data_ = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE).decode('utf-8', 'ignore')
-			if ls_data_ == "":
-				break
-			ls_data += ls_data_
-
-		self.data_socket.close()
+		print("after setup")
+		t = FtpSession.myThread("t1", self.data_socket)
+		t.start()
 		self.get_resp()
+		ls_data = t.ls_data
+		self.data_socket.close()
 		self.verbose = save_verbose
 		return ls_data
 
@@ -407,7 +435,7 @@ class FtpSession:
 
 		if filename and not ls_data:
 			try:
-				list(map(lambda x: x.split()[-1] if x else x, self._ls(os.path.dirname(filename), False).split('\r\n'))).index(filename)
+				list(map(lambda x: x.split()[-1] if x else x, self._ls(os.path.dirname(filename), True).split('\r\n'))).index(filename)
 			except ValueError:
 				print("ls: cannot access remote directory '%s'. No such directory." % filename, file=sys.stdout)
 			return
@@ -535,7 +563,7 @@ class FtpSession:
 	def isdir(self, filename):
 		if not filename or filename[-1] == "/":
 			return True
-		ls_data = self._ls(filename, False)
+		ls_data = self._ls(filename, True)
 		ls_lines = [line for line in ls_data.split('\r\n') if len(line) != 0]
 		if len(ls_lines) == 1:
 			ls_words = ls_lines[0].split()
@@ -637,7 +665,7 @@ class FtpSession:
 		self.logged_in = True
 
 		print("Running fuse!")
-		mountpoint = "/home/amir/.ftpshell"
+		mountpoint = "/home/amir/.f3"
 		FUSE(FtpFuse(self), mountpoint, nothreads=True, foreground=True)
 
 	@ftp_command
