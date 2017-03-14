@@ -80,8 +80,10 @@ class FtpSession:
 			self.connected = False
 
 	def get_resp(self):
+		print("in get_resp 1")
 		while True:
 			s = self.client.recv(FtpSession.READ_BLOCK_SIZE)
+			print("get_resp receive %s" % s)
 			if (s == b''):
 				raise connection_closed_error
 			try:
@@ -94,6 +96,7 @@ class FtpSession:
 				if self.parser.resp_failed(resp):
 					raise response_error
 				break
+		print("in get_resp 2")
 		print("got resp: \n" + str(resp))
 		resp_handler = FtpRaw.get_resp_handler(self.cmd)
 		if resp_handler is not None:
@@ -405,7 +408,7 @@ class FtpSession:
 		self.verbose = verbose
 		if filename is None:
 			filename = ""
-		data_command = "LIST %s\r\n" % filename
+		data_command = "LIST -a %s\r\n" % filename
 		self.data_socket = self.setup_data_transfer(data_command)
 		print("after setup")
 		t = FtpSession.myThread("t1", self.data_socket)
@@ -434,10 +437,10 @@ class FtpSession:
 			return
 
 		if filename and not ls_data:
-			try:
-				list(map(lambda x: x.split()[-1] if x else x, self._ls(os.path.dirname(filename), True).split('\r\n'))).index(filename)
-			except ValueError:
-				print("ls: cannot access remote directory '%s'. No such directory." % filename, file=sys.stdout)
+			#try:
+			#	list(map(lambda x: x.split()[-1] if x else x, self._ls(os.path.dirname(filename), True).split('\r\n'))).index(filename)
+			#except ValueError:
+			print("ls: cannot access '%s'. No such file or directory." % filename, file=sys.stdout)
 			return
 
 		ls_data_colored = self.get_colored_ls_data(ls_data)
@@ -564,12 +567,16 @@ class FtpSession:
 		if not filename or filename[-1] == "/":
 			return True
 		ls_data = self._ls(filename, True)
-		ls_lines = [line for line in ls_data.split('\r\n') if len(line) != 0]
+		ls_lines = [line.strip() for line in ls_data.split('\r\n') if len(line) != 0]
+		'''
 		if len(ls_lines) == 1:
 			ls_words = ls_lines[0].split()
 			if ls_words[0] and ls_words[0][0] == '-' \
 					and ls_words[-1].strip() == os.path.basename(filename):
 				return True
+		'''
+		if ls_data and ls_data[0] == '.':
+			return True
 		return False
 
 	@ftp_command
@@ -665,7 +672,7 @@ class FtpSession:
 		self.logged_in = True
 
 		print("Running fuse!")
-		mountpoint = "/home/amir/.f3"
+		mountpoint = "/home/amir/.f2"
 		FUSE(FtpFuse(self), mountpoint, nothreads=True, foreground=True)
 
 	@ftp_command

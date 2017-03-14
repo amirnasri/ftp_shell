@@ -2,6 +2,7 @@
 import os, stat
 from fuse import FUSE, FuseOSError, Operations
 import threading
+import errno
 
 threadLock = threading.Lock()
 
@@ -38,8 +39,10 @@ class FtpFuse(Operations):
 		file_stat["st_mode"] = FtpFuse.get_file_mode(fields[0])
 		file_stat["st_mtime"] = 0
 		file_stat["st_nlink"] = int(fields[1])
-		file_stat["st_uid"] = fields[2]
-		file_stat["st_giu"] = fields[3]
+		#file_stat["st_uid"] = fields[2]
+		#file_stat["st_giu"] = fields[3]
+		file_stat["st_uid"] = 0
+		file_stat["st_giu"] = 0
 		file_stat["st_size"] = int(fields[4])
 		return fields[-1], file_stat
 
@@ -54,17 +57,26 @@ class FtpFuse(Operations):
 		return file_stats
 
 	@syncrnoize
+	def access(self, path, mode):
+		print("=============access path=%s, mode=%s" % (path, mode))
+		#if not os.access(full_path, mode):
+		ls_data = self.fs._ls(path)
+		if not ls_data:
+			raise FuseOSError(errno.EACCES)
+
+	@syncrnoize
 	def getattr(self, path, fh=None):
-		print("=============getattr path=%s, fh=" % (path) + str(fh))
+		print("=============getattr path=%s, fh=" % path + str(fh))
 		file_stat = dict()
 		if path is None or path[0] != "/":
 			return file_stat
 		cwd = self.fs.get_cwd()
 		print("cwd=" + cwd)
-		path = os.path.normpath(os.path.join(cwd, path))
+		path = os.path.normpath(os.path.join(cwd, path[1:]))
 		isdir = self.fs.isdir(path)
 
 
+		print("=============getattr new path=%s" % path)
 		ls_data = self.fs._ls(path)
 		print(ls_data)
 		file_stats = FtpFuse.parse_ls_data(ls_data)
@@ -74,10 +86,10 @@ class FtpFuse(Operations):
 			if isdir:
 				file_stat = file_stats["."]
 			else:
-				file_stat = file_stats[os.path.filename(path)]
+				file_stat = file_stats[os.path.basename(path)]
 		except KeyError:
 			pass
-		print("=============getattr ends!")
+		print("=============getattr ends! %s" % str(file_stat))
 		return file_stat
 
 

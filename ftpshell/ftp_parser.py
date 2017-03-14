@@ -44,15 +44,15 @@ class response:
     def process_string(self, s):
         """ Parse a string received from the server into lines
         and then process each line. """
-        while not self.is_complete:
-            # TODO: change '\r\n' to '\r*\n'
-            rn_pos = s.find(b'\r\n')
-            if (rn_pos == -1):
-                break
-            newline = s[:rn_pos + 2]
-            s = s[rn_pos + 2:]
-            self.process_newline(newline)
-            self.lines.append(newline)
+        #while True:
+        # TODO: change '\r\n' to '\r*\n'
+        rn_pos = s.find(b'\r\n')
+        if (rn_pos == -1):
+            return s
+        newline = s[:rn_pos + 2]
+        s = s[rn_pos + 2:]
+        self.process_newline(newline)
+        self.lines.append(newline)
         return s
 
     def __repr__(self):
@@ -77,7 +77,7 @@ class ftp_client_parser:
     def resp_failed(resp):
         return resp.type == ftp_resp_type.error\
                or resp.type == ftp_resp_type.fail
-
+        
     def get_resp(self, str, verbose):
         if not self.resp:
             self.resp = response()
