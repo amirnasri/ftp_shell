@@ -47,11 +47,11 @@ class FtpFuse(Operations):
 	def parse_ls_data(ls_data):
 		ls_lines = [l for l in ls_data.split("\r\n") if len(l) > 0]
 		print(ls_lines)
-		ls_info = dict()
+		file_stats = dict()
 		for l in ls_lines:
 			filename, file_stat = FtpFuse.parse_ls_line(l)
-			ls_info[filename] = file_stat
-		return ls_info
+			file_stats[filename] = file_stat
+		return file_stats
 
 	@syncrnoize
 	def getattr(self, path, fh=None):
@@ -61,26 +61,20 @@ class FtpFuse(Operations):
 			return file_stat
 		cwd = self.fs.get_cwd()
 		print("cwd=" + cwd)
-		path = cwd + path
-		if path[-1] == "/":
-			path = path[:-1]
-		print(path, self.fs.isdir(path))
-		dirname = ""
-		#isdir = self.fs.isdir(path)
-		isdir = True
-		if isdir:
-			dirname = os.path.dirname(path)
-			ls_data = self.fs._ls(dirname)
-		else:
-			ls_data = self.fs._ls(path)
+		path = os.path.normpath(os.path.join(cwd, path))
+		isdir = self.fs.isdir(path)
+
+
+		ls_data = self.fs._ls(path)
 		print(ls_data)
-		ls_info = FtpFuse.parse_ls_data(ls_data)
-		print(ls_info)
+		file_stats = FtpFuse.parse_ls_data(ls_data)
+		#FtpFuse.add_path_cache(isdir, path, ls_info)
+		print(file_stats)
 		try:
 			if isdir:
-				file_stat = ls_info[path]
+				file_stat = file_stats["."]
 			else:
-				file_stat = ls_info[dirname]
+				file_stat = file_stats[os.path.filename(path)]
 		except KeyError:
 			pass
 		print("=============getattr ends!")

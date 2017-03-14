@@ -396,7 +396,7 @@ class FtpSession:
 				print(ls_data)
 				self.ls_data = ls_data
 			except BaseException as e:
-			    print("Received unpexpected exception '%s'." % e.__class__.__name__)
+				print("Received unpexpected exception '%s'." % e.__class__.__name__)
 			print("Exiting " + self.name)
 
 	def _ls(self, filename = None, verbose = False):
@@ -426,7 +426,7 @@ class FtpSession:
 		if len(args) == 1:
 			filename = args[0]
 		try:
-			ls_data = self._ls(filename, self.verbose)
+			ls_data = self._ls(os.path.join(self.cwd + filename), self.verbose)
 		except response_error:
 			if self.data_socket:
 				self.data_socket.close()
