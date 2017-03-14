@@ -405,7 +405,7 @@ class FtpSession:
 		self.verbose = verbose
 		if filename is None:
 			filename = ""
-		data_command = "LIST %s\r\n" % filename
+		data_command = "LIST -a %s\r\n" % filename
 		self.data_socket = self.setup_data_transfer(data_command)
 		print("after setup")
 		t = FtpSession.myThread("t1", self.data_socket)
