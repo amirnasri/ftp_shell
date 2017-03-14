@@ -2,6 +2,7 @@
 import os, stat
 from fuse import FUSE, FuseOSError, Operations
 import threading
+import errno
 
 threadLock = threading.Lock()
 
@@ -54,33 +55,41 @@ class FtpFuse(Operations):
 		return ls_info
 
 	@syncrnoize
+	def access(self, path, mode):
+		print("=============access path=%s, mode=%s" % (path, mode))
+		#if not os.access(full_path, mode):
+		ls_data = self.fs._ls(path)
+		if not ls_data:
+			raise FuseOSError(errno.EACCES)
+
 	def getattr(self, path, fh=None):
-		print("=============getattr path=%s, fh=" % (path) + str(fh))
+		print("=============getattr path=%s, fh=" % path + str(fh))
 		file_stat = dict()
 		if path is None or path[0] != "/":
 			return file_stat
 		cwd = self.fs.get_cwd()
 		print("cwd=" + cwd)
 		path = cwd + path
-		if path[-1] == "/":
-			path = path[:-1]
-		print(path, self.fs.isdir(path))
-		dirname = ""
-		#isdir = self.fs.isdir(path)
-		isdir = True
-		if isdir:
-			dirname = os.path.dirname(path)
-			ls_data = self.fs._ls(dirname)
-		else:
-			ls_data = self.fs._ls(path)
+		#if path[-1] == "/":
+		#	path = path[:-1]
+		#print(path, self.fs.isdir(path))
+		#dirname = ""
+		isdir = self.fs.isdir(path)
+		#isdir = True
+		#if isdir:
+		#	dirname = os.path.dirname(path)
+		#	ls_data = self.fs._ls(dirname)
+		#else:
+		print("=============getattr new path=%s" % path)
+		ls_data = self.fs._ls(path)
 		print(ls_data)
 		ls_info = FtpFuse.parse_ls_data(ls_data)
 		print(ls_info)
 		try:
 			if isdir:
-				file_stat = ls_info[path]
+				file_stat = ls_info['.']
 			else:
-				file_stat = ls_info[dirname]
+				file_stat = ls_info[os.path.basename(path)]
 		except KeyError:
 			pass
 		print("=============getattr ends!")
