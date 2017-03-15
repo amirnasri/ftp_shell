@@ -8,6 +8,7 @@ from the server to raw ftp commands.
 from enum import Enum
 
 class parse_response_error(Exception): pass
+class connection_closed_error(Exception): pass
 
 class transfer(object):
     pass
@@ -44,15 +45,15 @@ class response:
     def process_string(self, s):
         """ Parse a string received from the server into lines
         and then process each line. """
-        #while True:
         # TODO: change '\r\n' to '\r*\n'
-        rn_pos = s.find(b'\r\n')
-        if (rn_pos == -1):
-            return s
-        newline = s[:rn_pos + 2]
-        s = s[rn_pos + 2:]
-        self.process_newline(newline)
-        self.lines.append(newline)
+        while not self.is_complete:
+            rn_pos = s.find(b'\r\n')
+            if (rn_pos == -1):
+                return s
+            newline = s[:rn_pos + 2]
+            s = s[rn_pos + 2:]
+            self.process_newline(newline)
+            self.lines.append(newline)
         return s
 
     def __repr__(self):
@@ -68,25 +69,64 @@ class ftp_resp_type(Enum):
     fail = 4
     error = 5
 
-class ftp_client_parser:
+class FtpClientParser:
+    READ_BLOCK_SIZE = 1024
     def __init__(self):
         self.buff = bytearray()
         self.resp = None
+        self.resp_queue = []
 
     @staticmethod
     def resp_failed(resp):
-        return resp.type == ftp_resp_type.error\
-               or resp.type == ftp_resp_type.fail
-        
-    def get_resp(self, str, verbose):
-        if not self.resp:
-            self.resp = response()
-        resp = self.resp
-        self.buff = resp.process_string(self.buff + str)
-        if resp.is_complete:
-            resp.type = ftp_resp_type(int(resp.resp_code / 100))
-            if verbose:
-                print(resp)
-            self.resp = None
-            return resp
-        return None
+        return (resp.type == ftp_resp_type.error
+                or resp.type == ftp_resp_type.fail)
+
+    def get_resp(self, client, verbose):
+        s = b''
+        while True:
+            if not self.resp:
+                self.resp = response()
+            resp = self.resp
+            # resp = self.parser.get_resp(s, self.verbose)
+            self.buff = resp.process_string(self.buff + s)
+            print()
+
+            print("s=%s, b=%s" % (s, self.buff))
+            print()
+
+            if resp.is_complete:
+                resp.type = ftp_resp_type(int(resp.resp_code / 100))
+                if verbose:
+                    print(resp)
+                self.resp = None
+                break
+            s = client.recv(FtpClientParser.READ_BLOCK_SIZE)
+            print("get_resp receive %s" % s)
+            if (s == b''):
+                raise connection_closed_error
+
+        return resp
+
+'''
+            if len(self.resp_queue) == 0:
+            s = client.recv(FtpClientParser.READ_BLOCK_SIZE)
+            print("get_resp receive %s" % s)
+            if (s == b''):
+                raise connection_closed_error
+
+            if not self.resp:
+                self.resp = response()
+            while True:
+                resp = self.resp
+                #resp = self.parser.get_resp(s, self.verbose)
+                self.buff = resp.process_string(self.buff + s)
+                if resp.is_complete:
+                    resp.type = ftp_resp_type(int(resp.resp_code / 100))
+                    if verbose:
+                        print(resp)
+                    self.resp =
+                    self.resp_queue.append(resp)
+
+        resp = self.resp_queue[0]
+        del self.resp_queue[0]
+'''

@@ -7,7 +7,7 @@ used by ftp_cli to establish a session with the ftp server and
 """
 from .ftp_raw import FtpRawRespHandler as FtpRaw, raw_command_error
 from .ftp_parser import parse_response_error
-from .ftp_parser import ftp_client_parser
+from .ftp_parser import FtpClientParser
 from .ftp_fuse import FtpFuse
 from fuse import FUSE
 import sys, os, re, subprocess, inspect
@@ -20,7 +20,6 @@ import threading
 class network_error(Exception): pass
 class cmd_not_implemented_error(Exception): pass
 class quit_error(Exception): pass
-class connection_closed_error(Exception): pass
 class login_error(Exception): pass
 class response_error(Exception): pass
 class transfer_complete(Exception): pass
@@ -52,7 +51,7 @@ class FtpSession:
 		self.cwd = ''
 		self.cmd = None
 		self.transfer_type = None
-		self.parser = ftp_client_parser()
+		self.parser = FtpClientParser()
 		self.connected = False
 		self.logged_in = False
 		self.data_socket = None
@@ -81,21 +80,14 @@ class FtpSession:
 
 	def get_resp(self):
 		print("in get_resp 1")
-		while True:
-			s = self.client.recv(FtpSession.READ_BLOCK_SIZE)
-			print("get_resp receive %s" % s)
-			if (s == b''):
-				raise connection_closed_error
-			try:
-				resp = self.parser.get_resp(s, self.verbose)
-			except parse_response_error:
-				print('Error occurred while parsing response to ftp command %s\n' % self.cmd, file=sys.stdout)
-				self.close_server()
-				raise
-			if resp:
-				if self.parser.resp_failed(resp):
-					raise response_error
-				break
+		try:
+			resp = self.parser.get_resp(self.client, self.verbose)
+		except parse_response_error:
+			print('Error occurred while parsing response to ftp command %s\n' % self.cmd, file=sys.stdout)
+			self.close_server()
+			raise
+		if self.parser.resp_failed(resp):
+			raise response_error
 		print("in get_resp 2")
 		print("got resp: \n" + str(resp))
 		resp_handler = FtpRaw.get_resp_handler(self.cmd)
@@ -672,7 +664,7 @@ class FtpSession:
 		self.logged_in = True
 
 		print("Running fuse!")
-		mountpoint = "/home/amir/.f2"
+		mountpoint = "/home/amir/.f1"
 		FUSE(FtpFuse(self), mountpoint, nothreads=True, foreground=True)
 
 	@ftp_command
