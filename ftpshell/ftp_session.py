@@ -9,6 +9,7 @@ from .ftp_raw import FtpRawRespHandler as FtpRaw, raw_command_error
 from .ftp_parser import parse_response_error
 from .ftp_parser import FtpClientParser
 from .ftp_fuse import FtpFuse
+from .file_info_cache import FileInfoCache
 from fuse import FUSE
 import sys, os, re, subprocess, inspect
 import socket
@@ -45,6 +46,7 @@ class FtpSession:
 		self.load_text_file_extensions()
 		self.passive = True
 		self.verbose = True
+		self.file_info_cache = FileInfoCache(self)
 		self.init_session()
 
 	def init_session(self):
@@ -117,6 +119,11 @@ class FtpSession:
 		except response_error:
 			self.close_server()
 
+	def get_abs_path(self, path):
+		if path.startswith("/"):
+			return os.path.normpath(path)
+		return os.path.normpath(os.path.join(self.cwd, path))
+
 	@staticmethod
 	def calculate_data_rate(filesize, seconds):
 		return filesize/seconds
@@ -150,18 +157,12 @@ class FtpSession:
 		print("Switched to binary mode")
 
 	@staticmethod
-	def get_file_info(path):
-		# Get filename and file extension from path
-		slash = path.rfind('/')
-		if slash != -1:
-			filename = path[slash + 1:]
-		else:
-			filename = path
+	def get_file_ext(filename):
 		dot = filename.rfind('.')
 		file_ext = ''
 		if dot != -1:
 			file_ext = filename[filename.rfind('.'):]
-		return filename, file_ext
+		return file_ext
 
 	def setup_data_transfer(self, data_command):
 		import inspect
@@ -225,7 +226,8 @@ class FtpSession:
 			FtpSession.print_usage()
 			return
 		path = args[0]
-		filename, file_ext = FtpSession.get_file_info(path)
+		filename = os.path.basename(path)
+		file_ext = FtpSession.get_file_ext(filename)
 		# If transfer type is not set, send TYPE command depending on the type of the file
 		# (TYPE A for ascii files and TYPE I for binary files)
 		transfer_type = self.transfer_type
@@ -394,13 +396,19 @@ class FtpSession:
 				print("Received unpexpected exception '%s'." % e.__class__.__name__)
 			print("Exiting " + self.name)
 
-	def _ls(self, filename = None, verbose = False):
+	def get_path_info(self, path):
+		try:
+			return self.file_info_cache.get_path_info(path)
+		except KeyError:
+			ls_data = self._ls(path)
+			self.file_info_cache.add_path_info(path, ls_data)
+			return self.file_info_cache.get_path_info(path)
+
+	def _ls(self, path, verbose = False):
 		verbose = True
 		save_verbose = self.verbose
 		self.verbose = verbose
-		if filename is None:
-			filename = ""
-		data_command = "LIST -a %s\r\n" % filename
+		data_command = "LIST -a %s\r\n" % path
 		self.data_socket = self.setup_data_transfer(data_command)
 		print("after setup")
 		t = FtpSession.myThread("t1", self.data_socket)
@@ -421,14 +429,14 @@ class FtpSession:
 		if len(args) == 1:
 			filename = args[0]
 		try:
-			ls_data = self._ls(os.path.join(self.cwd + filename), self.verbose)
+			ls_data = self._ls(self.get_abs_path(filename), self.verbose)
 		except response_error:
 			if self.data_socket:
 				self.data_socket.close()
 			print("ls: cannot access remote directory '%s'. No such file or directory." % filename, file=sys.stdout)
 			return
 
-		if filename and not ls_data:
+		if ls_data in None:
 			#try:
 			#	list(map(lambda x: x.split()[-1] if x else x, self._ls(os.path.dirname(filename), True).split('\r\n'))).index(filename)
 			#except ValueError:
@@ -555,21 +563,13 @@ class FtpSession:
 			self.send_raw_command("DELE %s\r\n" % filename)
 			self.get_resp()
 
-	def isdir(self, filename):
-		if not filename or filename[-1] == "/":
-			return True
-		ls_data = self._ls(filename, True)
-		ls_lines = [line.strip() for line in ls_data.split('\r\n') if len(line) != 0]
-		'''
-		if len(ls_lines) == 1:
-			ls_words = ls_lines[0].split()
-			if ls_words[0] and ls_words[0][0] == '-' \
-					and ls_words[-1].strip() == os.path.basename(filename):
-				return True
-		'''
-		if ls_data and ls_data[0] == '.':
-			return True
-		return False
+	def isdir(self, path):
+		abs_path = self.get_abs_path(path)
+		file_info = self.file_info_cache.get_file_info(abs_path)
+		if file_info is None:
+			return None
+		else:
+			return file_info['isdir']
 
 	@ftp_command
 	def rm(self, args):
@@ -664,7 +664,7 @@ class FtpSession:
 		self.logged_in = True
 
 		print("Running fuse!")
-		mountpoint = "/home/amir/.f1"
+		mountpoint = "/home/amir/d3"
 		FUSE(FtpFuse(self), mountpoint, nothreads=True, foreground=True)
 
 	@ftp_command

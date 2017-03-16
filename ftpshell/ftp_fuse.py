@@ -26,36 +26,6 @@ class FtpFuse(Operations):
 		print("readdir path=%s, fh=%d" % (path, fh))
 		return list("abc")
 
-	@staticmethod
-	def get_file_mode(s):
-		m = FtpFuse.file_mode_table[s[0]]
-		m += int("".join(map(lambda x: '0' if x == '-' else '1', s[1:])), 2)
-		return m
-
-	@staticmethod
-	def parse_ls_line(line):
-		fields = line.split()
-		file_stat = dict()
-		file_stat["st_mode"] = FtpFuse.get_file_mode(fields[0])
-		file_stat["st_mtime"] = 0
-		file_stat["st_nlink"] = int(fields[1])
-		#file_stat["st_uid"] = fields[2]
-		#file_stat["st_giu"] = fields[3]
-		file_stat["st_uid"] = 0
-		file_stat["st_giu"] = 0
-		file_stat["st_size"] = int(fields[4])
-		return fields[-1], file_stat
-
-	@staticmethod
-	def parse_ls_data(ls_data):
-		ls_lines = [l for l in ls_data.split("\r\n") if len(l) > 0]
-		print(ls_lines)
-		file_stats = dict()
-		for l in ls_lines:
-			filename, file_stat = FtpFuse.parse_ls_line(l)
-			file_stats[filename] = file_stat
-		return file_stats
-
 	@syncrnoize
 	def access(self, path, mode):
 		print("=============access path=%s, mode=%s" % (path, mode))
@@ -72,12 +42,14 @@ class FtpFuse(Operations):
 			return file_stat
 		cwd = self.fs.get_cwd()
 		print("cwd=" + cwd)
-		path = os.path.normpath(os.path.join(cwd, path[1:]))
-		isdir = self.fs.isdir(path)
+		abs_path = self.fs.get_abs_path(path[1:])
+		isdir = self.fs.isdir(abs_path)
 
+		print("=============getattr abs path=%s" % abs_path)
 
-		print("=============getattr new path=%s" % path)
-		ls_data = self.fs._ls(path)
+		self.fs.get_file_info(self, file):
+
+		ls_data = self.fs._ls(abs_path)
 		print(ls_data)
 		file_stats = FtpFuse.parse_ls_data(ls_data)
 		#FtpFuse.add_path_cache(isdir, path, ls_info)
@@ -89,7 +61,7 @@ class FtpFuse(Operations):
 				file_stat = file_stats[os.path.basename(path)]
 		except KeyError:
 			pass
-		print("=============getattr ends! %s" % str(file_stat))
+		print("=============getattr ends! %s, isdir=%d, os.path.basename(path)=%s" % (str(file_stat), isdir, os.path.basename(path)))
 		return file_stat
 
 
