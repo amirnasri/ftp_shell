@@ -56,7 +56,9 @@ class FtpCli:
             port = int(server[server_colon+1:])
             server = server[:server_colon]
 
-        return server, port, server_path, username, password
+        if len(sys.argv) > 2:
+            mountpoint = sys.argv[2]
+        return server, port, server_path, username, password, mountpoint
 
     def get_prompt(self):
         """ Generate color-coded prompt string. """
@@ -76,9 +78,9 @@ class FtpCli:
             try:
                 if self.first_attempt:
                     self.first_attempt = False
-                    server, port, server_path, username, password = self.proc_input_args()
+                    server, port, server_path, username, password, mountpoint = self.proc_input_args()
                     self.ftp = ftp_session.FtpSession(server, port)
-                    self.ftp.login(username, password, server_path)
+                    self.ftp.login(username, password, server_path, mountpoint)
                 else:
                         cmd_line = input(self.get_prompt())
                         if not cmd_line.strip():

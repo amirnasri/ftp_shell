@@ -89,10 +89,7 @@ class FtpClientParser:
             resp = self.resp
             # resp = self.parser.get_resp(s, self.verbose)
             self.buff = resp.process_string(self.buff + s)
-            print()
-
-            print("s=%s, b=%s" % (s, self.buff))
-            print()
+            #print("\ns=%s, b=%s\n" % (s, self.buff))
 
             if resp.is_complete:
                 resp.type = ftp_resp_type(int(resp.resp_code / 100))
@@ -101,7 +98,7 @@ class FtpClientParser:
                 self.resp = None
                 break
             s = client.recv(FtpClientParser.READ_BLOCK_SIZE)
-            print("get_resp receive %s" % s)
+            #print("get_resp receive %s" % s)
             if (s == b''):
                 raise connection_closed_error
 
