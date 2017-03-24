@@ -1,10 +1,10 @@
 # This is a cache to store file information fetched from the server.
 # Cache entries have the form (k, v) where the key is the absolute
-# path of the file on the server and v is a list with three elements:
-# v[0]: raw ls data fetched from the server
-# v[1]: dictionary containing stats information of the file (format is
-#   the same as that return by os.stat
-# v[2]: True if the file is a directory otherwise False
+# path of the resource on the server and v is dictionary with the following items:
+# v['ls_data']: raw ls data fetched from the server
+# v['stat']: dictionary containing stats information for the file (format is
+#   the same as that returned by os.stat
+# v['isdir']: True if the path is a directory otherwise False
 
 import stat
 import os
