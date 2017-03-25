@@ -682,6 +682,7 @@ class FtpSession:
 
 		print("Running fuse!")
 		mountpoint = os.path.abspath(mountpoint)
+		print(mountpoint)
 		FUSE(FtpFuse(self, self.cwd), mountpoint, nothreads=True, foreground=True)
 
 	@ftp_command

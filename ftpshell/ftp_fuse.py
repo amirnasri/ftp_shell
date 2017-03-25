@@ -44,7 +44,8 @@ class FtpFuse(Operations):
 		abs_path = self.abspath(path)
 		access = self.fs.get_path_info(abs_path)['stat']['st_mode'] & mode
 		print("access path=%s, mode=%d, access=%s" % (abs_path, mode, access))
-		return access
+		if not access:
+			raise FuseOSError(errno.EACCES)
 
 
 	#@syncrnoize
