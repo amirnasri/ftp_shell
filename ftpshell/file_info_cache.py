@@ -24,6 +24,9 @@ class FileInfoCache(object):
 	@staticmethod
 	def parse_ls_line(line):
 		fields = line.split()
+		from .ftp_session import print_blue
+		print_blue((repr(line), len(line)))
+		print_blue(repr(fields))
 		file_stat = dict()
 		file_stat["st_mode"] = FileInfoCache.get_file_mode(fields[0])
 		file_stat["st_atime"] = 0
@@ -35,7 +38,7 @@ class FileInfoCache(object):
 		file_stat["st_uid"] = 0
 		file_stat["st_gid"] = 0
 		file_stat["st_size"] = int(fields[4])
-		return fields[-1], file_stat
+		return " ".join(fields[8:]), file_stat
 
 	def parse_ls_data(ls_data):
 		"""

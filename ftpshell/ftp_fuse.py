@@ -5,6 +5,8 @@ import threading
 import errno
 import inspect
 
+class path_not_found_error(Exception): pass
+
 threadLock = threading.Lock()
 
 def syncrnoize(f):
@@ -26,29 +28,31 @@ class FtpFuse(Operations):
 		"""
 		:param ftp_session: An instance of :class:`FtpSession`
 		:param base_dir: The directory on the ftp server to be mounted.
-			All paths received from FUSE will be added to his path to obtain
-			the absolute path on the server.
-			Example: for base_dir="/usr/ftpuser/", FUSE path "/p" will be translated
-			to "/usr/ftpuser/p"
+			This is an absolute path (starts with a "/"). All paths received
+			from FUSE will be added to his path to obtain the absolute path
+			on the server.
+			Example: for base_dir="/usr/ftpuser/", FUSE path "/p" will be
+			translated to "/usr/ftpuser/p"
 		"""
 		self.fs = ftp_session
+		print('base_dir=%s' % base_dir)
 		if not ftp_session.path_exists(base_dir):
-			raise path_not_found_error
+			raise path_not_found_error("path %s does not exist on the server." % base_dir)
 		self.base_dir = base_dir
 
 	def abspath(self, path):
 		return os.path.join(self.base_dir, path[1:])
 
-	#@syncrnoize
+	@syncrnoize
 	def access(self, path, mode):
 		abs_path = self.abspath(path)
-		access = self.fs.get_path_info(abs_path)['stat']['st_mode'] & mode
+		access = (self.fs.get_path_info(abs_path)['stat']['st_mode'] >> 6) & mode
 		print("access path=%s, mode=%d, access=%s" % (abs_path, mode, access))
 		if not access:
 			raise FuseOSError(errno.EACCES)
 
 
-	#@syncrnoize
+	@syncrnoize
 	def readdir(self, path, fh):
 		print("readdir path=%s, fh=%d" % (path, fh))
 		if path is None or path[0] != "/":
@@ -76,7 +80,7 @@ class FtpFuse(Operations):
 			raise FuseOSError(errno.EACCES)
 	'''
 
-	#@syncrnoize
+	@syncrnoize
 	def getattr(self, path, fh=None):
 		#print("=============getattr1 path=%s, fh=" % path + str(fh))
 		if path is None or path[0] != "/":
@@ -90,6 +94,11 @@ class FtpFuse(Operations):
 	# File methods
 	# ============
 
+	@syncrnoize
+	def read(self, path, length, offset, fh):
+		if path is None or path[0] != "/":
+			raise FileNotFoundError
+		self.fs.download_file(path, offset)
 
 
 import types

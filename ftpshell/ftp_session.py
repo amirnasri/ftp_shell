@@ -29,6 +29,10 @@ def ftp_command(f):
 	f.ftp_command = True
 	return f
 
+#TODO: remove!
+def print_blue(s):
+	print(LsColors.BOLD + LsColors.OKBLUE + "path_info=%s" % (s,)  + LsColors.ENDC)
+
 class FtpSession:
 	"""
 	Provides function to establish a connection with the server
@@ -47,6 +51,7 @@ class FtpSession:
 		self.passive = True
 		self.verbose = True
 		self.file_info_cache = FileInfoCache(self)
+		self.stdout = sys.stderr
 		self.init_session()
 
 	def init_session(self):
@@ -69,7 +74,7 @@ class FtpSession:
 			self.client.settimeout(10)
 			self.client.connect((server, port))
 		except socket.error:
-			print("Could not connect to the server.", file=sys.stdout)
+			print("Could not connect to the server.", file=self.stdout)
 		else:
 			self.connected = True
 
@@ -84,7 +89,7 @@ class FtpSession:
 		try:
 			resp = self.parser.get_resp(self.client, self.verbose)
 		except parse_response_error:
-			print('Error occurred while parsing response to ftp command %s\n' % self.cmd, file=sys.stdout)
+			print('Error occurred while parsing response to ftp command %s\n' % self.cmd, file=self.stdout)
 			self.close_server()
 			raise
 		if self.parser.resp_failed(resp):
@@ -172,7 +177,7 @@ class FtpSession:
 			try:
 				resp = self.get_resp()
 			except response_error:
-				print("PASV command failed.", file=sys.stdout)
+				print("PASV command failed.", file=self.stdout)
 				raise raw_command_error
 
 			data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -206,7 +211,7 @@ class FtpSession:
 			try:
 				resp = self.get_resp()
 			except response_error:
-				print("PORT command failed.", file=sys.stdout)
+				print("PORT command failed.", file=self.stdout)
 				raise raw_command_error
 
 			self.send_raw_command(data_command)
@@ -217,13 +222,7 @@ class FtpSession:
 				data_socket = None
 		return data_socket
 
-	@ftp_command
-	def get(self, args):
-		""" usage: get path-to-file """
-		if len(args) != 1:
-			FtpSession.print_usage()
-			return
-		path = args[0]
+	def download_file(self, path, offset):
 		filename = os.path.basename(path)
 		file_ext = FtpSession.get_file_ext(filename)
 		# If transfer type is not set, send TYPE command depending on the type of the file
@@ -238,17 +237,25 @@ class FtpSession:
 		try:
 			self.get_resp()
 		except response_error:
-			print("TYPE command failed.", file=sys.stdout)
-			return
+			print("TYPE command failed.", file=self.stdout)
+			raise
+
+		if offset != 0:
+			self.send_raw_command("REST %d\r\n" % offset)
+			try:
+				self.get_resp()
+			except response_error:
+				print("REST command failed.", file=self.stdout)
+				raise
 
 		if self.verbose:
-			print("Requesting file '%s' from the server...\n" % filename)
+			print("Requesting file '%s' at offset %d from the server...\n" % (filename, offset))
 
 		try:
 			self.data_socket = self.setup_data_transfer("RETR %s\r\n" % path)
 		except response_error:
-			print("get: cannot access remote file '%s'. No such file or directory." % filename, file=sys.stdout)
-			return
+			print("Cannot access remote file '%s'. No such file or directory." % filename, file=self.stdout)
+			raise
 
 		f = open(filename, "wb")
 		filesize = 0
@@ -269,6 +276,16 @@ class FtpSession:
 			print("%d bytes received in %f seconds (%.2f b/s)."
 				%(filesize, elapsed_time, FtpSession.calculate_data_rate(filesize, elapsed_time)))
 
+	@ftp_command
+	def get(self, args):
+		""" usage: get path-to-file(s) """
+		paths = args
+		for path in paths:
+			try:
+				self.download_file(path, 0)
+			except response_error:
+				print("get: download failed for file '%s'." % path, file=self.stdout)
+
 	def _upload_file(self, path):
 		f = open(path, "rb")
 		# If transfer type is not set, send TYPE command depending on the type of the file
@@ -284,7 +301,7 @@ class FtpSession:
 		try:
 			self.get_resp()
 		except response_error:
-			print("TYPE command failed.", file=sys.stdout)
+			print("TYPE command failed.", file=self.stdout)
 			return
 
 		if self.verbose:
@@ -293,7 +310,7 @@ class FtpSession:
 		try:
 			self.data_socket = self.setup_data_transfer("STOR %s\r\n" % path)
 		except response_error:
-			print("put: could not upload '%s'." % filename, file=sys.stdout)
+			print("put: could not upload '%s'." % filename, file=self.stdout)
 			return
 
 		filesize = 0
@@ -325,13 +342,13 @@ class FtpSession:
 					try:
 						self.get_resp()
 					except response_error:
-						print("put: cannot create remote directory '%s'." % root, file=sys.stdout)
+						print("put: cannot create remote directory '%s'." % root, file=self.stdout)
 						return
 				for f in filenames:
 					self._upload_file(os.path.join(root, f))
 			self.file_info_cache.del_path_info(path)
 		else:
-			print("put: cannot access local file '%s'. No such file or directory." % path, file=sys.stdout)
+			print("put: cannot access local file '%s'. No such file or directory." % path, file=self.stdout)
 
 	@ftp_command
 	def put(self, args):
@@ -374,9 +391,22 @@ class FtpSession:
 
 		return "\r\n".join(colored_lines)
 
-	class myThread(threading.Thread):
+	def get_path_info(self, path):
+		try:
+			return self.file_info_cache.get_path_info(path)
+		except KeyError:
+			# KeyError indicates that the path does not exist in the cache. This
+			# in turn means that the no list information has been fetched from
+			# the server for this path. If list information was fetched previousely
+			# but indicated that the path did not exist, the path is added to cache
+			# with value None.
+			ls_data = self._ls(path)
+			self.file_info_cache.add_path_info(path, ls_data)
+			return self.file_info_cache.get_path_info(path)
+
+	class LsDataThread(threading.Thread):
 		def __init__(self, name, data_socket):
-			threading.Thread.__init__(self)
+			super(FtpSession.LsDataThread, self).__init__()
 			self.name = name
 			self.data_socket = data_socket
 			self.ls_data = ""
@@ -396,28 +426,16 @@ class FtpSession:
 				print("Received unpexpected exception '%s'." % e.__class__.__name__)
 			print("Exiting " + self.name)
 
-	def get_path_info(self, path):
-		try:
-			return self.file_info_cache.get_path_info(path)
-		except KeyError:
-			# KeyError indicates that the path does not exist in the cache. This
-			# in turn means that the no list information has been fetched from
-			# the server for this path. If list information was fetched previousely
-			# but indicated that the path did not exist, the path is added to cache
-			# with value None.
-			ls_data = self._ls(path)
-			self.file_info_cache.add_path_info(path, ls_data)
-			return self.file_info_cache.get_path_info(path)
-
 	def _ls(self, path, verbose = False):
-		verbose = False
+		verbose = True
 		save_verbose = self.verbose
 		self.verbose = verbose
 		data_command = "LIST -a %s\r\n" % path
 		self.data_socket = self.setup_data_transfer(data_command)
-		t = FtpSession.myThread("t1", self.data_socket)
+		t = FtpSession.LsDataThread("LsDataThread", self.data_socket)
 		t.start()
 		self.get_resp()
+		t.join()
 		ls_data = t.ls_data
 		self.data_socket.close()
 		self.verbose = save_verbose
@@ -438,14 +456,14 @@ class FtpSession:
 		except response_error:
 			if self.data_socket:
 				self.data_socket.close()
-			print("ls: cannot access remote directory '%s'. No such file or directory." % filename, file=sys.stdout)
+			print("ls: cannot access remote directory '%s'. No such file or directory." % filename, file=self.stdout)
 			return
 
 		if path_info is None:
 			#try:
 			#	list(map(lambda x: x.split()[-1] if x else x, self._ls(os.path.dirname(filename), True).split('\r\n'))).index(filename)
 			#except ValueError:
-			print("ls: cannot access '%s'. No such file or directory." % path, file=sys.stdout)
+			print("ls: cannot access '%s'. No such file or directory." % path, file=self.stdout)
 			return
 		ls_data = path_info['ls_data']
 		ls_data_colored = self.get_colored_ls_data(ls_data)
@@ -480,7 +498,7 @@ class FtpSession:
 			try:
 				self.get_resp()
 			except response_error:
-				print("cd: cannot access remote directory '%s'. No such directory." % path, file=sys.stdout)
+				print("cd: cannot access remote directory '%s'. No such directory." % path, file=self.stdout)
 				return
 
 			self.send_raw_command("PWD\r\n")
@@ -501,7 +519,7 @@ class FtpSession:
 			try:
 				os.chdir(path)
 			except FileNotFoundError:
-				print("lcd: cannot access local directory '%s'. No such directory." % path, file=sys.stdout)
+				print("lcd: cannot access local directory '%s'. No such directory." % path, file=self.stdout)
 
 	@ftp_command
 	def passive(self, args):
@@ -553,7 +571,7 @@ class FtpSession:
 		try:
 			self.get_resp()
 		except response_error:
-			print("mkdir: cannot create remote directory '%s'." % dirname, file=sys.stdout)
+			print("mkdir: cannot create remote directory '%s'." % dirname, file=self.stdout)
 			return
 
 	def _rm(self, path, isdir):
@@ -578,7 +596,9 @@ class FtpSession:
 			self.get_resp()
 
 	def path_exists(self, path):
-		return self.get_path_info(path) is not None
+		path_info = self.get_path_info(path)
+		print_blue(path_info)
+		return path_info is not None
 
 	def is_path_dir(self, path):
 		path_info = self.get_path_info(path)
@@ -605,7 +625,7 @@ class FtpSession:
 				else:
 					self._rm(path, False)
 			except response_error:
-				print("rm: cannot delete remote directory '%s'." % path, file=sys.stdout)
+				print("rm: cannot delete remote directory '%s'." % path, file=self.stdout)
 			else:
 				print("deleting %s" % path)
 				self.file_info_cache.del_path_info()
@@ -649,6 +669,10 @@ class FtpSession:
 		self.logged_in = True
 
 	def login(self, username, password, server_path, mountpoint):
+		if self.logged_in:
+			print("Already logged in.", file=self.stdout)
+			return
+
 		while not username:
 			username = input('Username:')
 		if username == 'anonymous':
@@ -683,7 +707,7 @@ class FtpSession:
 		print("Running fuse!")
 		mountpoint = os.path.abspath(mountpoint)
 		print(mountpoint)
-		FUSE(FtpFuse(self, self.cwd), mountpoint, nothreads=True, foreground=True)
+		#FUSE(FtpFuse(self, self.get_cwd()), mountpoint, nothreads=True, foreground=True)
 
 	@ftp_command
 	def quit(self, args):
