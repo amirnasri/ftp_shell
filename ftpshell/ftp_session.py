@@ -223,8 +223,13 @@ class FtpSession:
 		return data_socket
 
 	def download_file(self, path, offset):
-		filename = os.path.basename(path)
-		file_ext = FtpSession.get_file_ext(filename)
+		"""Download a single file located at `path` on the server.
+
+		:param path: str, path of the file to the downloaded. The
+		 path can be absolute or relative to the current server directory.
+		:return: bytes, A buffer containing the contents of the file
+		"""
+		file_ext = FtpSession.get_file_ext(path)
 		# If transfer type is not set, send TYPE command depending on the type of the file
 		# (TYPE A for ascii files and TYPE I for binary files)
 		transfer_type = self.transfer_type
@@ -249,14 +254,22 @@ class FtpSession:
 				raise
 
 		if self.verbose:
-			print("Requesting file '%s' at offset %d from the server...\n" % (filename, offset))
+			print("Requesting file '%s' at offset %d from the server...\n" % (path, offset))
 
-		try:
-			self.data_socket = self.setup_data_transfer("RETR %s\r\n" % path)
-		except response_error:
-			print("Cannot access remote file '%s'. No such file or directory." % filename, file=self.stdout)
-			raise
+		self.data_socket = self.setup_data_transfer("RETR %s\r\n" % path)
 
+		file_data = bytes()
+		while True:
+			file_data_ = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE)
+			if file_data_ == b'':
+				break
+			if self.transfer_type == 'A':
+				file_data_ = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
+			file_data += file_data_
+		self.get_resp()
+		self.data_socket.close()
+
+		"""
 		f = open(filename, "wb")
 		filesize = 0
 		curr_time = time.time()
@@ -275,16 +288,27 @@ class FtpSession:
 		if self.verbose:
 			print("%d bytes received in %f seconds (%.2f b/s)."
 				%(filesize, elapsed_time, FtpSession.calculate_data_rate(filesize, elapsed_time)))
+		"""
+		return file_data
+
 
 	@ftp_command
 	def get(self, args):
 		""" usage: get path-to-file(s) """
 		paths = args
 		for path in paths:
+			#TODO: Add directory download.
+			#if self.get_path_info(path)['isdir']:
+			#else:
+			filename = os.path.basename(path)
 			try:
-				self.download_file(path, 0)
+				buff = self.download_file(path, 0)
 			except response_error:
-				print("get: download failed for file '%s'." % path, file=self.stdout)
+				print("get: cannot access remote file '%s'. No such file or directory." % path, file=self.stdout)
+			else:
+				f = open(filename, "wb")
+				f.write(buff)
+				f.close()
 
 	def _upload_file(self, path):
 		f = open(path, "rb")
@@ -392,6 +416,16 @@ class FtpSession:
 		return "\r\n".join(colored_lines)
 
 	def get_path_info(self, path):
+		"""Get path information. First look if the information for
+		path is already cached. If not ask the server and add the
+		information to the cache.
+
+		:param path: str, path of file or directory on the server.
+			The path can be absolute, or relative to the server current
+			directory.
+		//TODO: define return type
+		:return:
+		"""
 		try:
 			return self.file_info_cache.get_path_info(path)
 		except KeyError:
@@ -707,7 +741,7 @@ class FtpSession:
 		print("Running fuse!")
 		mountpoint = os.path.abspath(mountpoint)
 		print(mountpoint)
-		#FUSE(FtpFuse(self, self.get_cwd()), mountpoint, nothreads=True, foreground=True)
+		FUSE(FtpFuse(self, self.get_cwd()), mountpoint, nothreads=True, foreground=True)
 
 	@ftp_command
 	def quit(self, args):

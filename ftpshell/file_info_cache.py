@@ -41,8 +41,7 @@ class FileInfoCache(object):
 		return " ".join(fields[8:]), file_stat
 
 	def parse_ls_data(ls_data):
-		"""
-			Parse response from the server to LIST -a command.
+		"""Parse response from the server to LIST -a command.
 		"""
 		ls_lines = [l for l in ls_data.split("\r\n") if len(l) > 0]
 		file_stats = dict()

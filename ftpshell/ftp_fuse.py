@@ -82,11 +82,11 @@ class FtpFuse(Operations):
 
 	@syncrnoize
 	def getattr(self, path, fh=None):
-		#print("=============getattr1 path=%s, fh=" % path + str(fh))
 		if path is None or path[0] != "/":
 			raise FileNotFoundError
 		abs_path = self.abspath(path)
 		path_info = self.fs.get_path_info(abs_path)
+		print("=============getattr1 path=%s, path_info=%s" % (path, path_info))
 		if path_info is None:
 			raise FileNotFoundError
 		return path_info['stat']
@@ -98,7 +98,9 @@ class FtpFuse(Operations):
 	def read(self, path, length, offset, fh):
 		if path is None or path[0] != "/":
 			raise FileNotFoundError
-		self.fs.download_file(path, offset)
+		abs_path = self.abspath(path)
+		print("=============read abs_path=%s, fh=" % abs_path)
+		return self.fs.download_file(abs_path, offset)
 
 
 import types
