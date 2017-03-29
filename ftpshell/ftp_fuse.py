@@ -1,9 +1,9 @@
 "This module provides connection with fusepy module."
+from __future__ import print_function
 import os, stat
 from fuse import FUSE, FuseOSError, Operations
 import threading
 import errno
-import inspect
 
 class path_not_found_error(Exception): pass
 
@@ -11,7 +11,7 @@ threadLock = threading.Lock()
 
 def syncrnoize(f):
 	def new_f(*args, **kwargs):
-		print("#########acquireing lock " + " called by " + inspect.stack()[1][3])
+		#print("#########acquireing lock " + " called by " + inspect.stack()[1][3])
 		threadLock.acquire()
 		try:
 			ret = f(*args, **kwargs)
@@ -19,7 +19,7 @@ def syncrnoize(f):
 			raise e
 		finally:
 			threadLock.release()
-			print("#########released lock")
+			#print("#########released lock")
 		return ret
 	return new_f
 
@@ -56,7 +56,7 @@ class FtpFuse(Operations):
 	def readdir(self, path, fh):
 		print("readdir path=%s, fh=%d" % (path, fh))
 		if path is None or path[0] != "/":
-			raise FileNotFoundError
+			raise OSError
 		abs_path = self.abspath(path)
 		dirents = []
 		if self.fs.is_path_dir(abs_path):
@@ -83,25 +83,59 @@ class FtpFuse(Operations):
 	@syncrnoize
 	def getattr(self, path, fh=None):
 		if path is None or path[0] != "/":
-			raise FileNotFoundError
+			raise OSError
 		abs_path = self.abspath(path)
 		path_info = self.fs.get_path_info(abs_path)
 		print("=============getattr1 path=%s, path_info=%s" % (path, path_info))
 		if path_info is None:
-			raise FileNotFoundError
+			raise OSError
 		return path_info['stat']
 
 	# File methods
 	# ============
 
 	@syncrnoize
+	def create(self, path, mode, fi=None):
+		if path is None or path[0] != "/":
+			raise OSError
+		abs_path = self.abspath(path)
+		print("=============create abs_path=%s, fh=" % abs_path)
+		self.fs._upload_file(abs_path, 0, b"")
+
+	@syncrnoize
+	def open(self, path, mode, fi=None):
+		if path is None or path[0] != "/":
+			raise OSError
+		abs_path = self.abspath(path)
+		print("=============open abs_path=%s, fh=" % abs_path)
+		self.fs._upload_file(abs_path, 0, b"")
+		return 5
+
+	@syncrnoize
 	def read(self, path, length, offset, fh):
 		if path is None or path[0] != "/":
-			raise FileNotFoundError
+			raise OSError
 		abs_path = self.abspath(path)
 		print("=============read abs_path=%s, fh=" % abs_path)
 		return self.fs.download_file(abs_path, offset)
 
+
+	def write(self, path, buf, offset, fh):
+		if path is None or path[0] != "/":
+			raise OSError
+		abs_path = self.abspath(path)
+		print("=============write abs_path=%s, fh=" % abs_path)
+		self.fs._upload_file(abs_path, offset, buf)
+		return len(buf)
+
+	def truncate(self, path, length, fh=None):
+		pass
+
+	def flush(self, path, fh):
+		pass
+
+	def release(self, path, fh):
+		pass
 
 import types
 

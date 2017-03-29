@@ -6,18 +6,21 @@
 #   the same as that returned by os.stat
 # v['isdir']: True if the path is a directory otherwise False
 
+from __future__ import print_function
+import pickle
 import stat
 import os
 
 class FileInfoCache(object):
-	file_mode_table = dict((k, v) for v, k in stat._filemode_table[0])
+	filemode_table = dict([(40960, 'l'), (32768, '-'), (24576, 'b'),
+								(16384, 'd'), (8192, 'c'), (4096, 'p')])
 	def __init__(self, fs):
 		self.fs = fs
 		self.cache = dict()
 
 	@staticmethod
 	def get_file_mode(s):
-		m = FileInfoCache.file_mode_table[s[0]]
+		m = FileInfoCache.filemode_table[s[0]]
 		m += int("".join(map(lambda x: '0' if x == '-' else '1', s[1:])), 2)
 		return m
 

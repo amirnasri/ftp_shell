@@ -1,3 +1,4 @@
+from __future__ import print_function
 import os
 import sys
 import socket
@@ -7,6 +8,7 @@ from .ftp_parser import parse_response_error
 from .ftp_session import login_error
 from .ftp_session import LsColors
 
+class cli_error(Exception): pass
 class cli_error(Exception): pass
 
 class FtpCli:
@@ -97,7 +99,7 @@ class FtpCli:
                 print("Login failed.")
             except ftp_session.cmd_not_implemented_error:
                 print("Command not recognized. Please use 'help' to see a list of available commands.")
-            except (socket.error, ftp_session.connection_closed_error, parse_response_error, ftp_session.network_error):
+            except (socket.error, parse_response_error, ftp_session.network_error):
                 self.ftp.close_server()
                 print("Connection was closed by the server.")
             except KeyboardInterrupt:

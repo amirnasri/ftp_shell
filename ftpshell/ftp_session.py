@@ -5,6 +5,7 @@ This module provides FtpSession class which is
 used by ftp_cli to establish a session with the ftp server and
  start the communication.
 """
+from __future__ import print_function
 from .ftp_raw import FtpRawRespHandler as FtpRaw, raw_command_error
 from .ftp_parser import parse_response_error
 from .ftp_parser import FtpClientParser
@@ -253,9 +254,6 @@ class FtpSession:
 				print("REST command failed.", file=self.stdout)
 				raise
 
-		if self.verbose:
-			print("Requesting file '%s' at offset %d from the server...\n" % (path, offset))
-
 		self.data_socket = self.setup_data_transfer("RETR %s\r\n" % path)
 
 		file_data = bytes()
@@ -300,6 +298,8 @@ class FtpSession:
 			#TODO: Add directory download.
 			#if self.get_path_info(path)['isdir']:
 			#else:
+			if self.verbose:
+				print("Requesting file '%s' from the server...\n" % path)
 			filename = os.path.basename(path)
 			try:
 				buff = self.download_file(path, 0)
@@ -310,8 +310,15 @@ class FtpSession:
 				f.write(buff)
 				f.close()
 
-	def _upload_file(self, path):
-		f = open(path, "rb")
+	def _upload_file(self, path, offset, file_data):
+		"""Upload a single file to location `path` on the server.
+
+		:param path: str, path of the file to the uploaded. The
+		 path can be absolute or relative to the current server directory.
+		:param offset: int, file position to start the upload.
+		:param file_data: bytes, A buffer containing the contents of the file.
+		"""
+
 		# If transfer type is not set, send TYPE command depending on the type of the file
 		# (TYPE A for ascii files and TYPE I for binary files)
 		transfer_type = self.transfer_type
@@ -326,39 +333,49 @@ class FtpSession:
 			self.get_resp()
 		except response_error:
 			print("TYPE command failed.", file=self.stdout)
-			return
+			raise
 
-		if self.verbose:
-			print("Uploading file %s to the ftp server...\n" % path)
-
+		self.send_raw_command("REST %d\r\n" % offset)
 		try:
-			self.data_socket = self.setup_data_transfer("STOR %s\r\n" % path)
+			self.get_resp()
 		except response_error:
-			print("put: could not upload '%s'." % filename, file=self.stdout)
-			return
+			print("REST command failed.", file=self.stdout)
+			raise
 
+		self.data_socket = self.setup_data_transfer("STOR %s\r\n" % path)
+
+		if self.transfer_type == 'A':
+			file_data = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
+		self.data_socket.send(file_data)
+		self.data_socket.close()
+		self.get_resp()
+
+	def upload_file(self, path):
+		if self.verbose:
+			print("Uploading file %s to the server...\n" % path)
+		f = open(path, "rb")
 		filesize = 0
 		curr_time = time.time()
 		while True:
 			file_data = f.read(FtpSession.READ_BLOCK_SIZE)
 			if file_data == b'':
 				break
-			if self.transfer_type == 'A':
-				file_data = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
-			self.data_socket.send(file_data)
+			self._upload_file(path, 0, file_data)
+			#if self.transfer_type == 'A':
+			#	file_data = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
+			#self.data_socket.send(file_data)
 			filesize += len(file_data)
 		elapsed_time = time.time()- curr_time
-		self.data_socket.close()
 		f.close()
-		self.get_resp()
 		if self.verbose:
 			print("%d bytes sent in %f seconds (%.2f b/s)."
 				%(filesize, elapsed_time, FtpSession.calculate_data_rate(filesize, elapsed_time)))
 
-	def upload_file(self, path):
+	def upload_path(self, path):
 		if os.path.isfile(path):
-			self._upload_file(path)
-			self.file_info_cache.del_path_info(path)
+			self.upload_file(path)
+			#TODO: only delte path from cache
+			self.file_info_cache.del_path_info()
 		elif os.path.is_path_dir(path):
 			for root, dirnames, filenames in os.walk(path):
 				if root:
@@ -369,8 +386,9 @@ class FtpSession:
 						print("put: cannot create remote directory '%s'." % root, file=self.stdout)
 						return
 				for f in filenames:
-					self._upload_file(os.path.join(root, f))
-			self.file_info_cache.del_path_info(path)
+					self.upload_file(os.path.join(root, f))
+			# TODO: only delte path from cache
+			self.file_info_cache.del_path_info()
 		else:
 			print("put: cannot access local file '%s'. No such file or directory." % path, file=self.stdout)
 
@@ -380,7 +398,7 @@ class FtpSession:
 		paths = args
 		expanded_paths = subprocess.check_output("echo %s" % " ".join(paths), shell=True).strip().split()
 		for path in expanded_paths:
-			self.upload_file(path.decode("utf-8"))
+			self.upload_path(path.decode("utf-8"))
 
 	def get_colored_ls_data(self, ls_data):
 		lines = ls_data.split('\r\n')
