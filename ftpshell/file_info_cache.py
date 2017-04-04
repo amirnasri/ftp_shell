@@ -12,8 +12,9 @@ import stat
 import os
 
 class FileInfoCache(object):
-	filemode_table = dict([(40960, 'l'), (32768, '-'), (24576, 'b'),
-								(16384, 'd'), (8192, 'c'), (4096, 'p')])
+	filemode_table = {k: v for v, k in [(40960, 'l'), (32768, '-'), (24576, 'b'),
+											(16384, 'd'), (8192, 'c'), (4096, 'p')]}
+
 	def __init__(self, fs):
 		self.fs = fs
 		self.cache = dict()
@@ -43,6 +44,7 @@ class FileInfoCache(object):
 		file_stat["st_size"] = int(fields[4])
 		return " ".join(fields[8:]), file_stat
 
+	@staticmethod
 	def parse_ls_data(ls_data):
 		"""Parse response from the server to LIST -a command.
 		"""

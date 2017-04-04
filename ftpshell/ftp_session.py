@@ -105,7 +105,7 @@ class FtpSession:
 	def send_raw_command(self, command):
 		if self.verbose:
 			print(command.strip())
-		self.client.send(bytes(command, 'ascii'))
+		self.client.send(command)
 		self.cmd = command.split()[0].strip()
 
 
@@ -264,6 +264,7 @@ class FtpSession:
 			if self.transfer_type == 'A':
 				file_data_ = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
 			file_data += file_data_
+		print(file_data)
 		self.get_resp()
 		self.data_socket.close()
 
@@ -398,7 +399,8 @@ class FtpSession:
 		paths = args
 		expanded_paths = subprocess.check_output("echo %s" % " ".join(paths), shell=True).strip().split()
 		for path in expanded_paths:
-			self.upload_path(path.decode("utf-8"))
+			#self.upload_path(path.decode("utf-8"))
+			self.upload_path(path)
 
 	def get_colored_ls_data(self, ls_data):
 		lines = ls_data.split('\r\n')
@@ -468,7 +470,7 @@ class FtpSession:
 			try:
 				ls_data = ""
 				while True:
-					ls_data_ = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE).decode('utf-8', 'ignore')
+					ls_data_ = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE)#.decode('utf-8', 'ignore')
 					if ls_data_ == "":
 						break
 					ls_data += ls_data_

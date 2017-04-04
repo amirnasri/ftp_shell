@@ -54,7 +54,8 @@ class FtpFuse(Operations):
 
 	@syncrnoize
 	def readdir(self, path, fh):
-		print("readdir path=%s, fh=%d" % (path, fh))
+		import sys
+		print("readdir path=%s, fh=%d, ver=%s" % (path, fh, sys.version))
 		if path is None or path[0] != "/":
 			raise OSError
 		abs_path = self.abspath(path)
@@ -67,18 +68,16 @@ class FtpFuse(Operations):
 			yield dirent
 		#return dirents
 
-	'''
 	@syncrnoize
 	def access(self, path, mode):
 		print("=============access path=%s, mode=%s" % (path, mode))
 		if path is None or path[0] != "/":
-			return file_stat
-		abs_path = self.base_dir, path[1:]
+			return FuseOSError(errno.EACCES)
+		abs_path = self.abspath(path)
 		print("=============getattr abs path=%s" % abs_path)
 		path_info = self.fs.get_path_info(abs_path)
 		if path_info is None:
 			raise FuseOSError(errno.EACCES)
-	'''
 
 	@syncrnoize
 	def getattr(self, path, fh=None):
@@ -88,7 +87,7 @@ class FtpFuse(Operations):
 		path_info = self.fs.get_path_info(abs_path)
 		print("=============getattr1 path=%s, path_info=%s" % (path, path_info))
 		if path_info is None:
-			raise OSError
+			raise FuseOSError(errno.ENOENT)
 		return path_info['stat']
 
 	# File methods
@@ -101,6 +100,7 @@ class FtpFuse(Operations):
 		abs_path = self.abspath(path)
 		print("=============create abs_path=%s, fh=" % abs_path)
 		self.fs._upload_file(abs_path, 0, b"")
+		return 3
 
 	@syncrnoize
 	def open(self, path, mode, fi=None):
@@ -108,8 +108,8 @@ class FtpFuse(Operations):
 			raise OSError
 		abs_path = self.abspath(path)
 		print("=============open abs_path=%s, fh=" % abs_path)
-		self.fs._upload_file(abs_path, 0, b"")
-		return 5
+		#self.fs._upload_file(abs_path, 0, b"")
+		return 3
 
 	@syncrnoize
 	def read(self, path, length, offset, fh):

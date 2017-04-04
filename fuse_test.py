@@ -40,9 +40,15 @@ class Passthrough(Operations):
 
     def getattr(self, path, fh=None):
         full_path = self._full_path(path)
-        st = os.lstat(full_path)
-        return dict((key, getattr(st, key)) for key in ('st_atime', 'st_ctime',
+        try:
+            st = os.lstat(full_path)
+        except Exception as e:
+            print e.__class__.__name__
+            raise e
+        d = dict((key, getattr(st, key)) for key in ('st_atime', 'st_ctime',
                      'st_gid', 'st_mode', 'st_mtime', 'st_nlink', 'st_size', 'st_uid'))
+        print(type(d), d)
+        return d
 
     def readdir(self, path, fh):
         full_path = self._full_path(path)
