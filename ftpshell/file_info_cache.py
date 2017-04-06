@@ -7,9 +7,10 @@
 # v['isdir']: True if the path is a directory otherwise False
 
 from __future__ import print_function
-import pickle
-import stat
 import os
+import sys
+print("sys.path %s" % sys.path)
+import dateutil.parser
 
 class FileInfoCache(object):
 	filemode_table = {k: v for v, k in [(40960, 'l'), (32768, '-'), (24576, 'b'),
@@ -27,6 +28,7 @@ class FileInfoCache(object):
 
 	@staticmethod
 	def parse_ls_line(line):
+		# -rwxr--r-- 1 amir amir 600 Mar  6 00:28 a.py*
 		fields = line.split()
 		from .ftp_session import print_blue
 		print_blue((repr(line), len(line)))
@@ -35,12 +37,12 @@ class FileInfoCache(object):
 		file_stat["st_mode"] = FileInfoCache.get_file_mode(fields[0])
 		file_stat["st_atime"] = 0
 		file_stat["st_ctime"] = 0
-		file_stat["st_mtime"] = 0
+		file_stat["st_mtime"] = int(dateutil.parser.parse(" ".join(fields[5:8])).strftime('%s'))
 		file_stat["st_nlink"] = int(fields[1])
 		# file_stat["st_uid"] = fields[2]
 		# file_stat["st_giu"] = fields[3]
-		file_stat["st_uid"] = 0
-		file_stat["st_gid"] = 0
+		file_stat["st_uid"] = os.getuid()
+		file_stat["st_gid"] = os.getgid()
 		file_stat["st_size"] = int(fields[4])
 		return " ".join(fields[8:]), file_stat
 

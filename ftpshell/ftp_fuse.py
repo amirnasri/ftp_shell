@@ -100,7 +100,7 @@ class FtpFuse(Operations):
 		abs_path = self.abspath(path)
 		print("=============create abs_path=%s, fh=" % abs_path)
 		self.fs._upload_file(abs_path, 0, b"")
-		return 3
+		return 0
 
 	@syncrnoize
 	def open(self, path, mode, fi=None):
@@ -109,7 +109,7 @@ class FtpFuse(Operations):
 		abs_path = self.abspath(path)
 		print("=============open abs_path=%s, fh=" % abs_path)
 		#self.fs._upload_file(abs_path, 0, b"")
-		return 3
+		return 0
 
 	@syncrnoize
 	def read(self, path, length, offset, fh):
@@ -120,6 +120,7 @@ class FtpFuse(Operations):
 		return self.fs.download_file(abs_path, offset)
 
 
+	@syncrnoize
 	def write(self, path, buf, offset, fh):
 		if path is None or path[0] != "/":
 			raise OSError
@@ -127,6 +128,18 @@ class FtpFuse(Operations):
 		print("=============write abs_path=%s, fh=" % abs_path)
 		self.fs._upload_file(abs_path, offset, buf)
 		return len(buf)
+
+	def unlink(self, path):
+		abs_path = self.abspath(path)
+		self.fs.rmfile(abs_path)
+
+	def mkdir(self, path, mode):
+		abs_path = self.abspath(path)
+		self.fs.mkdir([abs_path])
+
+	def rmdir(self, path):
+		abs_path = self.abspath(path)
+		self.fs.rmdir(abs_path)
 
 	def truncate(self, path, length, fh=None):
 		pass

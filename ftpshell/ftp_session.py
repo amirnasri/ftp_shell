@@ -351,6 +351,9 @@ class FtpSession:
 		self.data_socket.close()
 		self.get_resp()
 
+		# TODO: only delte path from cache
+		self.file_info_cache.del_path_info()
+
 	def upload_file(self, path):
 		if self.verbose:
 			print("Uploading file %s to the server...\n" % path)
@@ -627,27 +630,36 @@ class FtpSession:
 		except response_error:
 			print("mkdir: cannot create remote directory '%s'." % dirname, file=self.stdout)
 			return
+		self.file_info_cache.del_path_info()
 
-	def _rm(self, path, isdir):
-		if isdir:
-			ls_data = self.get_path_info(path)['ls_data']
-			ls_lines = []
-			for line in ls_data.split('\r\n'):
-				if len(line) == 0:
-					continue
-				filename = line.split()[-1]
-				if filename != '.' and filename != '..':
-					ls_lines.append(line)
+	def rmdir(self, path):
+		ls_data = self.get_path_info(path)['ls_data']
+		ls_lines = []
+		for line in ls_data.split('\r\n'):
+			if len(line) == 0:
+				continue
+			filename = line.split()[-1]
+			if filename != '.' and filename != '..':
+				ls_lines.append(line)
 
-			for ls_line in ls_lines:
-				filename = ls_line.split()[-1]
-				self._rm(os.path.join(path, filename), ls_line[0] == 'd')
+		for ls_line in ls_lines:
+			filename = ls_line.split()[-1]
+			if ls_line[0] == 'd':
+				self.rmdir(os.path.join(path, filename))
+			else:
+				self.rmfile(os.path.join(path, filename))
 
-			self.send_raw_command("RMD %s\r\n" % path)
-			self.get_resp()
-		else:
-			self.send_raw_command("DELE %s\r\n" % path)
-			self.get_resp()
+		self.send_raw_command("RMD %s\r\n" % path)
+		self.get_resp()
+
+		# TODO: only delte path from cache
+		self.file_info_cache.del_path_info()
+
+	def rmfile(self, path):
+		self.send_raw_command("DELE %s\r\n" % path)
+		self.get_resp()
+		# TODO: only delte path from cache
+		self.file_info_cache.del_path_info()
 
 	def path_exists(self, path):
 		path_info = self.get_path_info(path)
@@ -675,9 +687,9 @@ class FtpSession:
 				if isdir:
 					resp = input("rm: '%s' is a directory. Are you sure you want to remove it? (y/[n])" % path)
 					if (resp == 'y'):
-						self._rm(path, True)
+						self.rmdir(path)
 				else:
-					self._rm(path, False)
+					self.rmfile(path)
 			except response_error:
 				print("rm: cannot delete remote directory '%s'." % path, file=self.stdout)
 			else:
@@ -761,7 +773,7 @@ class FtpSession:
 		print("Running fuse!")
 		mountpoint = os.path.abspath(mountpoint)
 		print(mountpoint)
-		FUSE(FtpFuse(self, self.get_cwd()), mountpoint, nothreads=True, foreground=True)
+		FUSE(FtpFuse(self, self.get_cwd()), mountpoint, nothreads=True, foreground=False)
 
 	@ftp_command
 	def quit(self, args):
