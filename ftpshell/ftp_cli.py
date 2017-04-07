@@ -84,7 +84,7 @@ class FtpCli:
                     self.ftp = ftp_session.FtpSession(server, port)
                     self.ftp.login(username, password, server_path, mountpoint)
                 else:
-                        cmd_line = input(self.get_prompt())
+                        cmd_line = raw_input(self.get_prompt())
                         if not cmd_line.strip():
                             continue
 

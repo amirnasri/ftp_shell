@@ -59,3 +59,13 @@ class FtpRawRespHandler(object):
     def handle_cwd(resp):
         #resp.cwd = resp.lines[0].split()[-1].decode('ascii')
         pass
+
+    @staticmethod
+    def handle_size(resp):
+        if (len(resp.lines) != 1):
+            raise raw_command_error
+        resp_line = resp.lines[0]
+        resp_line_split = resp_line.split()
+        if resp_line_split[0] != '213':
+            raise raw_command_error
+        resp.size = int(resp_line_split[1])

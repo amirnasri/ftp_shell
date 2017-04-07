@@ -4,6 +4,7 @@ import os, stat
 from fuse import FUSE, FuseOSError, Operations
 import threading
 import errno
+import mmap
 
 class path_not_found_error(Exception): pass
 
@@ -39,6 +40,7 @@ class FtpFuse(Operations):
 		if not ftp_session.path_exists(base_dir):
 			raise path_not_found_error("path %s does not exist on the server." % base_dir)
 		self.base_dir = base_dir
+		self.curr_file = None
 
 	def abspath(self, path):
 		return os.path.join(self.base_dir, path[1:])
@@ -117,8 +119,13 @@ class FtpFuse(Operations):
 			raise OSError
 		abs_path = self.abspath(path)
 		print("=============read abs_path=%s, fh=" % abs_path)
-		return self.fs.download_file(abs_path, offset)
-
+		if not self.curr_file:
+			file_size = self.fs.size([abs_path])
+			mm_file = mmap.mmap(-1, file_size)
+			self.fs.download_file(abs_path, 0, mm_file)
+			self.curr_file = mm_file
+		self.curr_file.seek(offset)
+		return self.curr_file.read(length)
 
 	@syncrnoize
 	def write(self, path, buf, offset, fh):
@@ -147,8 +154,11 @@ class FtpFuse(Operations):
 	def flush(self, path, fh):
 		pass
 
+	@syncrnoize
 	def release(self, path, fh):
-		pass
+		self.curr_file.close()
+		self.curr_file = None
+
 
 import types
 

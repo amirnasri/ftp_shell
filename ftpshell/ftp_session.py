@@ -18,6 +18,7 @@ import time
 import types
 import getpass
 import threading
+import mmap
 
 class network_error(Exception): pass
 class cmd_not_implemented_error(Exception): pass
@@ -223,11 +224,13 @@ class FtpSession:
 				data_socket = None
 		return data_socket
 
-	def download_file(self, path, offset):
+	def download_file(self, path, offset, mm_file):
 		"""Download a single file located at `path` on the server.
 
-		:param path: str, path of the file to the downloaded. The
-		 path can be absolute or relative to the current server directory.
+		:param str path: path of the file to the downloaded. The
+		    path can be absolute or relative to the current server directory.
+		:param bool anonymous: if True, anonymous mmap will be used,
+		    otherwise filename is used for mmap.
 		:return: bytes, A buffer containing the contents of the file
 		"""
 		file_ext = FtpSession.get_file_ext(path)
@@ -258,13 +261,14 @@ class FtpSession:
 
 		file_data = bytes()
 		while True:
-			file_data_ = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE)
-			if file_data_ == b'':
+			file_data = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE)
+			if file_data == '':
 				break
 			if self.transfer_type == 'A':
-				file_data_ = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
-			file_data += file_data_
-		print(file_data)
+				#file_data_ = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
+				file_data = file_data.replace('\r\n', '\n')
+			#file_data += file_data_
+			mm_file.write(file_data)
 		self.get_resp()
 		self.data_socket.close()
 
@@ -288,7 +292,22 @@ class FtpSession:
 			print("%d bytes received in %f seconds (%.2f b/s)."
 				%(filesize, elapsed_time, FtpSession.calculate_data_rate(filesize, elapsed_time)))
 		"""
-		return file_data
+		#return file_data
+
+
+	@ftp_command
+	def size(self, args):
+		if len(args) != 1:
+			FtpSession.print_usage()
+			return -1
+		path = args[0]
+		self.send_raw_command("SIZE %s\r\n" % path)
+		try:
+			resp = self.get_resp()
+		except response_error:
+			print("SIZE command failed.", file=self.stdout)
+			raise
+		return resp.size
 
 
 	@ftp_command
@@ -302,15 +321,24 @@ class FtpSession:
 			if self.verbose:
 				print("Requesting file '%s' from the server...\n" % path)
 			filename = os.path.basename(path)
+			f = None
+			mm_file = None
 			try:
-				buff = self.download_file(path, 0)
+				#fileno = os.open(filename, os.O_WRONLY | os.O_CREAT)
+				f = open(filename, "w+b")
+				file_size = self.size([path])
+				print(file_size)
+				mm_file = mmap.mmap(f.fileno(), 0)
+				mm_file.resize(file_size)
+				buff = self.download_file(path, 0, mm_file)
 			except response_error:
 				print("get: cannot access remote file '%s'. No such file or directory." % path, file=self.stdout)
-			else:
-				f = open(filename, "wb")
-				f.write(buff)
-				f.close()
 
+			'''
+			finally:
+				f.close()
+				mm_file.close()
+			'''
 	def _upload_file(self, path, offset, file_data):
 		"""Upload a single file to location `path` on the server.
 
@@ -773,7 +801,7 @@ class FtpSession:
 		print("Running fuse!")
 		mountpoint = os.path.abspath(mountpoint)
 		print(mountpoint)
-		FUSE(FtpFuse(self, self.get_cwd()), mountpoint, nothreads=True, foreground=False)
+		#FUSE(FtpFuse(self, self.get_cwd()), mountpoint, nothreads=True, foreground=True)
 
 	@ftp_command
 	def quit(self, args):
