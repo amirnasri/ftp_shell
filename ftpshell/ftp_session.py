@@ -801,7 +801,7 @@ class FtpSession:
 		print("Running fuse!")
 		mountpoint = os.path.abspath(mountpoint)
 		print(mountpoint)
-		#FUSE(FtpFuse(self, self.get_cwd()), mountpoint, nothreads=True, foreground=True)
+		FUSE(FtpFuse(self, self.get_cwd()), mountpoint, nothreads=True, foreground=True)
 
 	@ftp_command
 	def quit(self, args):

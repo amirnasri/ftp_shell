@@ -135,7 +135,7 @@ class Passthrough(Operations):
 
 def main(mountpoint, root):
     print("mp=%s, root=%s" % (mountpoint, root))
-    FUSE(A(root), mountpoint, nothreads=True, foreground=False)
+    FUSE(A(root), mountpoint, nothreads=True, foreground=True)
 
 
 def dump_args(func):

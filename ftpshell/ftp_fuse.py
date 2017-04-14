@@ -102,15 +102,26 @@ class FtpFuse(Operations):
 		abs_path = self.abspath(path)
 		print("=============create abs_path=%s, fh=" % abs_path)
 		self.fs._upload_file(abs_path, 0, b"")
+		if self.curr_file:
+			self.curr_file.close()
+			self.curr_file = None
 		return 0
 
 	@syncrnoize
-	def open(self, path, mode, fi=None):
+	def open(self, path, flags):
 		if path is None or path[0] != "/":
 			raise OSError
 		abs_path = self.abspath(path)
 		print("=============open abs_path=%s, fh=" % abs_path)
-		#self.fs._upload_file(abs_path, 0, b"")
+		if flags & os.O_CREAT:
+			self.fs._upload_file(abs_path, 0, b"")
+		if self.curr_file:
+			self.curr_file.close()
+			self.curr_file = None
+		if flags & os.O_RDONLY:
+			file_size = self.fs.size([abs_path])
+			mm_file = mmap.mmap(-1, file_size)
+			self.curr_file = mm_file
 		return 0
 
 	@syncrnoize
@@ -119,11 +130,7 @@ class FtpFuse(Operations):
 			raise OSError
 		abs_path = self.abspath(path)
 		print("=============read abs_path=%s, fh=" % abs_path)
-		if not self.curr_file:
-			file_size = self.fs.size([abs_path])
-			mm_file = mmap.mmap(-1, file_size)
-			self.fs.download_file(abs_path, 0, mm_file)
-			self.curr_file = mm_file
+		self.fs.download_file(abs_path, 0, self.curr_file)
 		self.curr_file.seek(offset)
 		return self.curr_file.read(length)
 
@@ -156,8 +163,9 @@ class FtpFuse(Operations):
 
 	@syncrnoize
 	def release(self, path, fh):
-		self.curr_file.close()
-		self.curr_file = None
+		if self.curr_file:
+			self.curr_file.close()
+			self.curr_file = None
 
 
 import types
