@@ -9,9 +9,7 @@ from __future__ import print_function
 from .ftp_raw import FtpRawRespHandler as FtpRaw, raw_command_error
 from .ftp_parser import parse_response_error
 from .ftp_parser import FtpClientParser
-from .ftp_fuse import FtpFuse
 from .file_info_cache import FileInfoCache
-from fuse import FUSE
 import sys, os, re, subprocess, inspect
 import socket
 import time
@@ -816,7 +814,7 @@ class FtpSession:
 		self.username = username
 		self.logged_in = True
 
-	def login(self, username, password, server_path, mountpoint):
+	def login(self, username, password, server_path):
 		if self.logged_in:
 			print("Already logged in.", file=self.stdout)
 			return
@@ -851,11 +849,6 @@ class FtpSession:
 			self.cd([server_path])
 		self.username = username
 		self.logged_in = True
-
-		print("Running fuse!")
-		mountpoint = os.path.abspath(mountpoint)
-		print(mountpoint)
-		#FUSE(FtpFuse(self, self.get_cwd()), mountpoint, nothreads=True, foreground=True)
 
 	@ftp_command
 	def quit(self, args):

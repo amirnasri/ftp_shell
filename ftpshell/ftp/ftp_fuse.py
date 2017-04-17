@@ -177,8 +177,7 @@ class FtpFuse(Operations):
 
 import types
 import sys
-sys.path.append('.')
-print(sys.path)
+#TODO: use relative import
 import ftp_session
 
 

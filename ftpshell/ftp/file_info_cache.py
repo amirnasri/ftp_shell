@@ -9,7 +9,7 @@
 from __future__ import print_function
 import os
 import sys
-print("sys.path %s" % sys.path)
+#TODO: find out import problem
 import dateutil.parser
 
 class FileInfoCache(object):
