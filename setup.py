@@ -2,11 +2,11 @@ from distutils.core import setup
 
 setup(
     name='ftpshell',
-    version='1.8',
+    version='2.0',
     author='Amir Nasri',
     author_email='amnasri@gmail.com',
-    packages=['ftpshell'],
-    scripts=['bin/ftpshell'],
+    packages=['ftpshell', 'ftpshell.ftp'],
+    scripts=['bin/ftpshell', 'bin/ftpmount', 'bin/ftpumount'],
     url='http://pypi.python.org/pypi/ftpshell/',
     description='FTP client in python.',
 )
