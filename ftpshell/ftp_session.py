@@ -33,7 +33,7 @@ def ftp_command(f):
 
 #TODO: remove!
 def print_blue(s):
-	print(LsColors.BOLD + LsColors.OKBLUE + "path_info=%s" % (s,)  + LsColors.ENDC)
+	return (LsColors.BOLD + LsColors.OKBLUE + "%s" % (s,)  + LsColors.ENDC)
 
 class FtpSession:
 	"""
@@ -325,20 +325,20 @@ class FtpSession:
 			mm_file = None
 			try:
 				#fileno = os.open(filename, os.O_WRONLY | os.O_CREAT)
-				f = open(filename, "w+b")
+				f = file(filename, "w+b")
 				file_size = self.size([path])
-				print(file_size)
-				mm_file = mmap.mmap(f.fileno(), 0)
-				mm_file.resize(file_size)
+				f.seek(file_size - 1)
+				f.write('\0')
+				f.close()
+				f = open(filename, "r+b")
+				mm_file = mmap.mmap(f.fileno(), file_size)
 				buff = self.download_file(path, 0, mm_file)
 			except response_error:
 				print("get: cannot access remote file '%s'. No such file or directory." % path, file=self.stdout)
-
-			'''
 			finally:
 				f.close()
 				mm_file.close()
-			'''
+
 	def _upload_file(self, path, offset, file_data):
 		"""Upload a single file to location `path` on the server.
 
@@ -408,7 +408,7 @@ class FtpSession:
 			self.upload_file(path)
 			#TODO: only delte path from cache
 			self.file_info_cache.del_path_info()
-		elif os.path.is_path_dir(path):
+		elif os.path.isdir(path):
 			for root, dirnames, filenames in os.walk(path):
 				if root:
 					self.send_raw_command("MKD %s\r\n" % root)
@@ -662,16 +662,12 @@ class FtpSession:
 
 	def rmdir(self, path):
 		ls_data = self.get_path_info(path)['ls_data']
-		ls_lines = []
-		for line in ls_data.split('\r\n'):
-			if len(line) == 0:
+		for ls_line in ls_data.split('\r\n'):
+			if len(ls_line) == 0:
 				continue
-			filename = line.split()[-1]
-			if filename != '.' and filename != '..':
-				ls_lines.append(line)
-
-		for ls_line in ls_lines:
 			filename = ls_line.split()[-1]
+			if filename == '.' or filename == '..':
+				continue
 			if ls_line[0] == 'd':
 				self.rmdir(os.path.join(path, filename))
 			else:
@@ -691,7 +687,7 @@ class FtpSession:
 
 	def path_exists(self, path):
 		path_info = self.get_path_info(path)
-		print_blue(path_info)
+		print(print_blue(path_info))
 		return path_info is not None
 
 	def is_path_dir(self, path):
@@ -713,7 +709,7 @@ class FtpSession:
 				continue
 			try:
 				if isdir:
-					resp = input("rm: '%s' is a directory. Are you sure you want to remove it? (y/[n])" % path)
+					resp = raw_input("rm: '%s' is a directory. Are you sure you want to remove it? (y/[n])" % path)
 					if (resp == 'y'):
 						self.rmdir(path)
 				else:
@@ -721,8 +717,66 @@ class FtpSession:
 			except response_error:
 				print("rm: cannot delete remote directory '%s'." % path, file=self.stdout)
 			else:
-				print("deleting %s" % path)
 				self.file_info_cache.del_path_info()
+
+
+	def mvdir(self, old_path, new_path):
+		self.send_raw_command("MKD %s\r\n" % new_path)
+		self.get_resp()
+		ls_data = self.get_path_info(old_path)['ls_data']
+
+		for ls_line in ls_data.split('\r\n'):
+			if len(ls_line) == 0:
+				continue
+			filename = ls_line.split()[-1]
+			if filename == '.' or filename == '..':
+				continue
+			old_path_ = os.path.join(old_path, filename)
+			new_path_ = os.path.join(new_path, filename)
+
+			if ls_line[0] == 'd':
+				mv_func = self.mvdir
+			else:
+				mv_func = self.mvfile
+			mv_func(old_path_, new_path_)
+
+		self.send_raw_command("RMD %s\r\n" % old_path)
+		self.get_resp()
+
+	def mvfile(self, old_path, new_path):
+		self.send_raw_command("RNFR %s\r\n" % old_path)
+		self.get_resp()
+		self.send_raw_command("RNTO %s\r\n" % new_path)
+		self.get_resp()
+
+	@ftp_command
+	def mv(self, args):
+		"""	usage: mv old-name new-name
+		"""
+		if len(args) != 2:
+			FtpSession.print_usage()
+			return
+
+		old_path = args[0]
+		new_path = args[1]
+
+		try:
+			isdir = self.is_path_dir(old_path)
+		except response_error:
+			print("mv: cannot stat file %s." % old_path, file=self.stdout)
+			return
+		try:
+			if isdir:
+				self.mvdir(old_path, new_path)
+			else:
+				self.mvfile(old_path, new_path)
+		except response_error:
+			print("mv: cannot move file %s." % old_path, file=self.stdout)
+		else:
+			# TODO: only delte path from cache
+			self.file_info_cache.del_path_info()
+
+
 
 	@ftp_command
 	def user(self, args):
@@ -801,7 +855,7 @@ class FtpSession:
 		print("Running fuse!")
 		mountpoint = os.path.abspath(mountpoint)
 		print(mountpoint)
-		FUSE(FtpFuse(self, self.get_cwd()), mountpoint, nothreads=True, foreground=True)
+		#FUSE(FtpFuse(self, self.get_cwd()), mountpoint, nothreads=True, foreground=True)
 
 	@ftp_command
 	def quit(self, args):

@@ -118,10 +118,6 @@ class FtpFuse(Operations):
 		if self.curr_file:
 			self.curr_file.close()
 			self.curr_file = None
-		if flags & os.O_RDONLY:
-			file_size = self.fs.size([abs_path])
-			mm_file = mmap.mmap(-1, file_size)
-			self.curr_file = mm_file
 		return 0
 
 	@syncrnoize
@@ -130,6 +126,12 @@ class FtpFuse(Operations):
 			raise OSError
 		abs_path = self.abspath(path)
 		print("=============read abs_path=%s, fh=" % abs_path)
+		if not self.curr_file:
+			file_size = self.fs.size([abs_path])
+			if file_size == 0:
+				return b""
+			mm_file = mmap.mmap(-1, file_size)
+			self.curr_file = mm_file
 		self.fs.download_file(abs_path, 0, self.curr_file)
 		self.curr_file.seek(offset)
 		return self.curr_file.read(length)
@@ -155,6 +157,11 @@ class FtpFuse(Operations):
 		abs_path = self.abspath(path)
 		self.fs.rmdir(abs_path)
 
+	def rename(self, old, new):
+		abs_old_path = self.abspath(old)
+		abs_new_path = self.abspath(new)
+		self.fs.mv([abs_old_path, abs_new_path])
+
 	def truncate(self, path, length, fh=None):
 		pass
 
@@ -169,6 +176,11 @@ class FtpFuse(Operations):
 
 
 import types
+import sys
+sys.path.append('.')
+print(sys.path)
+import ftp_session
+
 
 def dump_args(func):
 	"This decorator dumps out the arguments passed to a function before calling it"
@@ -178,7 +190,7 @@ def dump_args(func):
 		arguments = ', '.join(
 			'%s=%r' % entry
 			for entry in list(zip(argnames,args[:len(argnames)]))+[("args",list(args[len(argnames):]))]+[("kwargs",kwargs)])
-		print("%s(%s)" % (fname, arguments))
+		print("%s(%s)" % (ftp_session.print_blue(fname), arguments))
 		return func(*args, **kwargs)
 	return echo_func
 
