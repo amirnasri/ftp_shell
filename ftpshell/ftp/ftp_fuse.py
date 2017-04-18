@@ -135,8 +135,9 @@ class FtpFuse(Operations):
 				return b""
 			print("filesize=%d" % file_size)
 			mm_file = mmap.mmap(-1, file_size)
+			#mm_file.seek(0)
 			self.curr_file = mm_file
-		self.fs.download_file(abs_path, 0, self.curr_file)
+			self.fs.download_file(abs_path, 0, self.curr_file)
 		self.curr_file.seek(offset)
 		return self.curr_file.read(length)
 

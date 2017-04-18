@@ -6,10 +6,6 @@ used by ftp_cli to establish a session with the ftp server and
  start the communication.
 """
 from __future__ import print_function
-from .ftp_raw import FtpRawRespHandler as FtpRaw, raw_command_error
-from .ftp_parser import parse_response_error
-from .ftp_parser import FtpClientParser
-from .file_info_cache import FileInfoCache
 import sys, os, re, subprocess, inspect
 import socket
 import time
@@ -17,6 +13,12 @@ import types
 import getpass
 import threading
 import mmap
+from fuse import FUSE
+from .ftp_fuse import FtpFuse
+from .ftp_raw import FtpRawRespHandler as FtpRaw, raw_command_error
+from .ftp_parser import parse_response_error
+from .ftp_parser import FtpClientParser
+from .file_info_cache import FileInfoCache
 
 class network_error(Exception): pass
 class cmd_not_implemented_error(Exception): pass
@@ -52,6 +54,8 @@ class FtpSession:
 		self.verbose = True
 		self.file_info_cache = FileInfoCache(self)
 		self.stdout = sys.stderr
+		self.mountpoint = None
+		self.devnull = open(os.devnull, "wb")
 		self.init_session()
 
 	def init_session(self):
@@ -110,7 +114,8 @@ class FtpSession:
 
 	def load_text_file_extensions(self):
 		try:
-			f = open('text_file_extensions')
+			filename = os.path.join(os.path.dirname(__file__), 'text_file_extensions')
+			f = open(filename)
 			for line in f:
 				self.text_file_extensions.add(line.strip())
 		except:
@@ -263,14 +268,13 @@ class FtpSession:
 			file_data = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE)
 			if file_data == '':
 				break
-			if self.transfer_type == 'A':
+			if transfer_type == 'A':
 				#file_data_ = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
 				file_data = file_data.replace('\r\n', '\n')
 			#file_data += file_data_
-			print("self.transfer_type = %s, size=%d" % (transfer_type, len(file_data)))
 			mm_file.write(file_data)
 			tsize += len(file_data)
-			print("tsize = %d" % tsize)
+			print("tsize = %d, mm_tell=%d" % (tsize, mm_file.tell()))
 		self.get_resp()
 		self.data_socket.close()
 
@@ -854,6 +858,15 @@ class FtpSession:
 		self.username = username
 		self.logged_in = True
 
+		self.mountpoint = os.path.expanduser('~/.ftpshell')
+		pid = os.fork()
+		if not pid:
+			# Child process
+			#print("Running fuse!")
+			#sys.stdout = sys.stderr = open(os.devnull, "w")
+			FUSE(FtpFuse(self, self.get_cwd()), self.mountpoint, nothreads=True, foreground=True)
+			sys.exit()
+
 	@ftp_command
 	def quit(self, args):
 		raise quit_error
@@ -888,15 +901,25 @@ class FtpSession:
 		if cmd_line[0] == '!':
 			subprocess.call(cmd_line[1:], shell=True)
 			return
-		cmd_line = cmd_line.split()
-		cmd = cmd_line[0]
-		cmd_args = cmd_line[1:]
+		cmd_line_split = cmd_line.split()
+		cmd = cmd_line_split[0]
+		cmd_args = cmd_line_split[1:]
 
 		if hasattr(FtpSession, cmd):
 			if not self.logged_in and (cmd != 'user' and cmd != 'quit'):
 				print("Not logged in. Please login first with USER and PASS.")
 				return
 			getattr(FtpSession, cmd)(self, cmd_args)
+		elif self.mountpoint:
+			try:
+				curr_dir = os.getcwd()
+				os.chdir(self.mountpoint)
+				#print("calling %s on %s" % (cmd_line, self.mountpoint))
+				subprocess.check_call(cmd_line, shell=True, stderr=self.devnull)
+				#print("return successfully")
+				os.chdir(curr_dir)
+			except subprocess.CalledProcessError:
+				raise cmd_not_implemented_error
 		else:
 			raise cmd_not_implemented_error
 

@@ -43,7 +43,7 @@ def proc_input_args(usage):
     if server_colon != -1:
         port = int(server[server_colon + 1:])
         server = server[:server_colon]
-
+    mountpoint = None
     if len(sys.argv) > 2:
         mountpoint = sys.argv[2]
     return server, port, server_path, username, password, mountpoint
