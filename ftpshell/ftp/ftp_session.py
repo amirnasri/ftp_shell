@@ -41,7 +41,7 @@ class FtpSession:
 	for parsing raw ftp response and on ftp_raw module for handling
 	the low level raw ftp commands such as RETR, STOR, and LIST.
 	"""
-	READ_BLOCK_SIZE = 1024
+	READ_BLOCK_SIZE = 1024 * 1024
 
 	def __init__(self, server, port=21):
 		self.text_file_extensions = set()
@@ -258,6 +258,7 @@ class FtpSession:
 		self.data_socket = self.setup_data_transfer("RETR %s\r\n" % path)
 
 		file_data = bytes()
+		tsize = 0
 		while True:
 			file_data = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE)
 			if file_data == '':
@@ -266,7 +267,10 @@ class FtpSession:
 				#file_data_ = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
 				file_data = file_data.replace('\r\n', '\n')
 			#file_data += file_data_
+			print("self.transfer_type = %s, size=%d" % (transfer_type, len(file_data)))
 			mm_file.write(file_data)
+			tsize += len(file_data)
+			print("tsize = %d" % tsize)
 		self.get_resp()
 		self.data_socket.close()
 

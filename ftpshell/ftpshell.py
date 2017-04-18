@@ -10,12 +10,12 @@ from .ftp.ftp_session import LsColors
 
 class cli_error(Exception): pass
 
-def proc_input_args():
+def proc_input_args(usage):
     """ Parse command arguments and use them to start a
     ftp session.
     """
     if len(sys.argv) < 2:
-        print('Usage: ftpshell [username[:password]@]server[:port]')
+        print(usage)
         raise cli_error
 
     username = ''
@@ -80,7 +80,8 @@ class FtpCli:
             try:
                 if self.first_attempt:
                     self.first_attempt = False
-                    server, port, server_path, username, password, mountpoint = proc_input_args()
+                    usage = 'Usage: ftpshell [username[:password]@]server[:port]'
+                    server, port, server_path, username, password, mountpoint = proc_input_args(usage)
                     self.ftp = ftp_session.FtpSession(server, port)
                     self.ftp.login(username, password, server_path)
                 else:

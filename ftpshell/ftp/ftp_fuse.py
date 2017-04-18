@@ -13,14 +13,17 @@ threadLock = threading.Lock()
 def syncrnoize(f):
 	def new_f(*args, **kwargs):
 		#print("#########acquireing lock " + " called by " + inspect.stack()[1][3])
-		threadLock.acquire()
-		try:
-			ret = f(*args, **kwargs)
+		#threadLock.acquire()
+		#try:
+		ret = f(*args, **kwargs)
+
+		'''
 		except Exception as e:
-			raise e
+			pass #raise e
 		finally:
-			threadLock.release()
 			#print("#########released lock")
+		'''
+		#threadLock.release()
 		return ret
 	return new_f
 
@@ -130,6 +133,7 @@ class FtpFuse(Operations):
 			file_size = self.fs.size([abs_path])
 			if file_size == 0:
 				return b""
+			print("filesize=%d" % file_size)
 			mm_file = mmap.mmap(-1, file_size)
 			self.curr_file = mm_file
 		self.fs.download_file(abs_path, 0, self.curr_file)

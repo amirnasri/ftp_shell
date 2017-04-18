@@ -12,7 +12,8 @@ from .ftpshell import cli_error
 
 def main():
 	try:
-		server, port, server_path, username, password, mountpoint = proc_input_args()
+		usage = 'Usage: ftpshell [username[:password]@]server[:port] mountpoint'
+		server, port, server_path, username, password, mountpoint = proc_input_args(usage)
 		ftp = ftp_session.FtpSession(server, port)
 		ftp.login(username, password, server_path)
 	except cli_error:
@@ -26,10 +27,15 @@ def main():
 	if not pid:
 		# Child process
 		print("Running fuse!")
-		sys.stdout = sys.stderr = open(os.devnull, "w")
+		#sys.stdout = sys.stderr = open(os.devnull, "w")
+		mp_created = False
+		if not os.path.exists(mountpoint):
+			mp_created = True
+			os.mkdir(mountpoint)
 		mountpoint = os.path.abspath(mountpoint)
-		print(mountpoint)
 		FUSE(FtpFuse(ftp, ftp.get_cwd()), mountpoint, nothreads=True, foreground=True)
+		if mp_created:
+			os.rmdir(mountpoint)
 
 	# except BaseException as e:
 	#    print("Received unpexpected exception '%s'. Closing the session." % e.__class__.__name__)
