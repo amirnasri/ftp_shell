@@ -911,15 +911,15 @@ class FtpSession:
 				return
 			getattr(FtpSession, cmd)(self, cmd_args)
 		elif self.mountpoint:
-			try:
-				curr_dir = os.getcwd()
-				os.chdir(self.mountpoint)
-				#print("calling %s on %s" % (cmd_line, self.mountpoint))
-				subprocess.check_call(cmd_line, shell=True, stderr=self.devnull)
-				#print("return successfully")
-				os.chdir(curr_dir)
-			except subprocess.CalledProcessError:
-				raise cmd_not_implemented_error
+			#try:
+			curr_dir = os.getcwd()
+			os.chdir(self.mountpoint)
+			#print("calling %s on %s" % (cmd_line, self.mountpoint))
+			subprocess.check_call(cmd_line, shell=True) #, stderr=self.devnull
+			#print("return successfully")
+			os.chdir(curr_dir)
+			#except subprocess.CalledProcessError:
+			#	raise cmd_not_implemented_error
 		else:
 			raise cmd_not_implemented_error
 
