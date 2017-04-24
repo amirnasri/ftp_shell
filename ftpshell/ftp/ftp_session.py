@@ -13,6 +13,8 @@ import types
 import getpass
 import threading
 import mmap
+from multiprocessing import Manager, Process
+
 from fuse import FUSE
 from .ftp_fuse import FtpFuse
 from .ftp_raw import FtpRawRespHandler as FtpRaw, raw_command_error
@@ -35,6 +37,7 @@ def ftp_command(f):
 def print_blue(s):
 	return (LsColors.BOLD + LsColors.OKBLUE + "%s" % (s,)  + LsColors.ENDC)
 
+
 class FtpSession:
 	"""
 	Provides function to establish a connection with the server
@@ -56,10 +59,12 @@ class FtpSession:
 		self.stdout = sys.stderr
 		self.mountpoint = None
 		self.devnull = open(os.devnull, "wb")
+		self.shared_dict = Manager().dict()
 		self.init_session()
 
+
 	def init_session(self):
-		self.cwd = ''
+		self.shared_dict['cwd'] = ''
 		self.cmd = None
 		self.transfer_type = None
 		self.parser = FtpClientParser()
@@ -130,7 +135,7 @@ class FtpSession:
 	def get_abs_path(self, path):
 		if path.startswith("/"):
 			return os.path.normpath(path)
-		return os.path.normpath(os.path.join(self.cwd, path))
+		return os.path.normpath(os.path.join(self.shared_dict['cwd'], path))
 
 	@staticmethod
 	def calculate_data_rate(filesize, seconds):
@@ -564,12 +569,12 @@ class FtpSession:
 	def pwd(self, args=None):
 		self.send_raw_command("PWD\r\n")
 		resp = self.get_resp()
-		self.cwd = resp.cwd
+		self.shared_dict['cwd'] = resp.cwd
 
 	def get_cwd(self):
-		if not self.cwd:
+		if not self.shared_dict['cwd']:
 			self.pwd()
-		return self.cwd
+		return self.shared_dict['cwd']
 
 	@ftp_command
 	def cd(self, args):
@@ -594,7 +599,7 @@ class FtpSession:
 
 			self.send_raw_command("PWD\r\n")
 			resp = self.get_resp()
-			self.cwd = resp.cwd
+			self.shared_dict['cwd'] = resp.cwd
 
 	@ftp_command
 	def lcd(self, args):
@@ -858,7 +863,8 @@ class FtpSession:
 		self.username = username
 		self.logged_in = True
 
-		self.mountpoint = os.path.expanduser('~/.ftpshell')
+		self.mountpoint = os.path.expanduser('~/.ftpshell1')
+		'''
 		pid = os.fork()
 		if not pid:
 			# Child process
@@ -866,6 +872,14 @@ class FtpSession:
 			#sys.stdout = sys.stderr = open(os.devnull, "w")
 			FUSE(FtpFuse(self, self.get_cwd()), self.mountpoint, nothreads=True, foreground=True)
 			sys.exit()
+		'''
+
+		def run_fuse(self):
+			sys.stdout = sys.stderr = open(os.devnull, "w")
+			FUSE(FtpFuse(self), self.mountpoint, nothreads=True, foreground=True)
+
+		fp = Process(target=run_fuse, args=(self,))
+		fp.start()
 
 	@ftp_command
 	def quit(self, args):
@@ -911,15 +925,16 @@ class FtpSession:
 				return
 			getattr(FtpSession, cmd)(self, cmd_args)
 		elif self.mountpoint:
-			#try:
-			curr_dir = os.getcwd()
-			os.chdir(self.mountpoint)
-			#print("calling %s on %s" % (cmd_line, self.mountpoint))
-			subprocess.check_call(cmd_line, shell=True) #, stderr=self.devnull
-			#print("return successfully")
-			os.chdir(curr_dir)
-			#except subprocess.CalledProcessError:
-			#	raise cmd_not_implemented_error
+			try:
+				curr_dir = os.getcwd()
+				os.chdir(self.mountpoint)
+				#print("calling %s on %s" % (cmd_line, self.mountpoint))
+				subprocess.check_call(cmd_line, shell=True) #, stderr=self.devnull
+				#print("return successfully")
+				os.chdir(curr_dir)
+			except subprocess.CalledProcessError:
+				#raise cmd_not_implemented_error
+				pass
 		else:
 			raise cmd_not_implemented_error
 

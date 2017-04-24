@@ -28,7 +28,7 @@ def syncrnoize(f):
 	return new_f
 
 class FtpFuse(Operations):
-	def __init__(self, ftp_session, base_dir):
+	def __init__(self, ftp_session, base_dir=None):
 		"""
 		:param ftp_session: An instance of :class:`FtpSession`
 		:param base_dir: The directory on the ftp server to be mounted.
@@ -40,13 +40,16 @@ class FtpFuse(Operations):
 		"""
 		self.fs = ftp_session
 		print('base_dir=%s' % base_dir)
-		if not ftp_session.path_exists(base_dir):
+		if base_dir and not ftp_session.path_exists(base_dir):
 			raise path_not_found_error("path %s does not exist on the server." % base_dir)
 		self.base_dir = base_dir
 		self.curr_file = None
 
 	def abspath(self, path):
-		return os.path.join(self.base_dir, path[1:])
+		if self.base_dir:
+			return os.path.join(self.base_dir, path[1:])
+		else:
+			return os.path.join(self.fs.shared_dict['cwd'], path[1:])
 
 	@syncrnoize
 	def access(self, path, mode):
