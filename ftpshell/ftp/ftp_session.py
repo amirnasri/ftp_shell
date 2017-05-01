@@ -249,8 +249,8 @@ class FtpSession:
 		Args:
 		    path (str): path of the file to the downloaded. The path can be absolute
 		        or relative to the current server directory.
-			offset (int): byte position to start the download from.
-			mm_file : memory-map object where the downloaded bytes should be written.
+		    offset (int): byte position to start the download from.
+		    mm_file : memory-map object where the downloaded bytes should be written.
 
 		Returns (bytes):
 		    A buffer containing the contents of the file.
