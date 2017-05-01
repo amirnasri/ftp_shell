@@ -2,9 +2,9 @@
 ftp session module.
 
 This module provides FtpSession class which is used by ftp_cli
- to establish a session with the ftp server and start
- the communication. FtpSession class can also be used as an
- stand-alone ftp-session as described in class documentation.
+to establish a session with the ftp server and start
+the communication. FtpSession class can also be used as an
+stand-alone ftp-session as described in class documentation.
 """
 from __future__ import print_function
 import sys, os, re, subprocess, inspect
@@ -247,13 +247,13 @@ class FtpSession:
 		"""Download a single file located at `path` on the server.
 
 		Args:
-			path (str): path of the file to the downloaded. The path can be absolute
-				or relative to the current server directory.
+		    path (str): path of the file to the downloaded. The path can be absolute
+		        or relative to the current server directory.
 			offset (int): byte position to start the download from.
 			mm_file : memory-map object where the downloaded bytes should be written.
 
 		Returns (bytes):
-			A buffer containing the contents of the file.
+		    A buffer containing the contents of the file.
 
 		"""
 		file_ext = FtpSession.get_file_ext(path)
