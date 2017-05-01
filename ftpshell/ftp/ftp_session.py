@@ -369,11 +369,11 @@ class FtpSession:
 		"""Upload a single file to location `path` on the server.
 
 		Args:
-			path (str): path of the file to the uploaded. The
+		    path (str): path of the file to the uploaded. The
 		        path can be absolute or relative to the current server directory.
-			offset (int): file position to start the upload.
-			#TODO: check file data type
-			file_data (bytes): A buffer containing the contents of the file.
+		    offset (int): file position to start the upload.
+		    #TODO: check file data type
+		    file_data (bytes): A buffer containing the contents of the file.
 
 		"""
 
