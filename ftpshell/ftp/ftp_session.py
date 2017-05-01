@@ -1,9 +1,10 @@
 """
 ftp session module.
 
-This module provides FtpSession class which is
-used by ftp_cli to establish a session with the ftp server and
- start the communication.
+This module provides FtpSession class which is used by ftp_cli
+ to establish a session with the ftp server and start
+ the communication. FtpSession class can also be used as an
+ stand-alone ftp-session as described in class documentation.
 """
 from __future__ import print_function
 import sys, os, re, subprocess, inspect
@@ -39,8 +40,7 @@ def print_blue(s):
 
 
 class FtpSession:
-	"""
-	Provides function to establish a connection with the server
+	"""Provides function to establish a connection with the server
 	and high level function to communicate with the server such
 	as get, put, and ls. This class relies on ftp_parser module
 	for parsing raw ftp response and on ftp_raw module for handling
@@ -49,6 +49,12 @@ class FtpSession:
 	READ_BLOCK_SIZE = 1024 * 1024
 
 	def __init__(self, server, port=21):
+		"""
+		Args:
+			server (str): domain-name or IP address of the ftp-server.
+			port (int): port number the ftp-server is listening on.
+
+		"""
 		self.text_file_extensions = set()
 		self.server = server
 		self.port = port
@@ -95,6 +101,11 @@ class FtpSession:
 			self.connected = False
 
 	def get_resp(self):
+		"""Get a response to the current ftp request.
+
+		Blocks until the ftp parser returns a complete response or raises an error.
+		Then processes the response using the registered raw ftp response handler.
+		"""
 		try:
 			resp = self.parser.get_resp(self.client, self.verbose)
 		except parse_response_error:
@@ -235,11 +246,15 @@ class FtpSession:
 	def download_file(self, path, offset, mm_file):
 		"""Download a single file located at `path` on the server.
 
-		:param str path: path of the file to the downloaded. The
-		    path can be absolute or relative to the current server directory.
-		:param bool anonymous: if True, anonymous mmap will be used,
-		    otherwise filename is used for mmap.
-		:return: bytes, A buffer containing the contents of the file
+		Args:
+			path (str): path of the file to the downloaded. The path can be absolute
+				or relative to the current server directory.
+			offset (int): byte position to start the download from.
+			mm_file : memory-map object where the downloaded bytes should be written.
+
+		Returns (bytes):
+			A buffer containing the contents of the file.
+
 		"""
 		file_ext = FtpSession.get_file_ext(path)
 		# If transfer type is not set, send TYPE command depending on the type of the file
@@ -353,10 +368,13 @@ class FtpSession:
 	def _upload_file(self, path, offset, file_data):
 		"""Upload a single file to location `path` on the server.
 
-		:param path: str, path of the file to the uploaded. The
-		 path can be absolute or relative to the current server directory.
-		:param offset: int, file position to start the upload.
-		:param file_data: bytes, A buffer containing the contents of the file.
+		Args:
+			path (str): path of the file to the uploaded. The
+		        path can be absolute or relative to the current server directory.
+			offset (int): file position to start the upload.
+			#TODO: check file data type
+			file_data (bytes): A buffer containing the contents of the file.
+
 		"""
 
 		# If transfer type is not set, send TYPE command depending on the type of the file
