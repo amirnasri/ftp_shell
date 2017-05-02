@@ -45,6 +45,11 @@ class FtpSession:
 	as get, put, and ls. This class relies on ftp_parser module
 	for parsing raw ftp response and on ftp_raw module for handling
 	the low level raw ftp commands such as RETR, STOR, and LIST.
+
+	Example:
+	    >>> fs = FTPSession("ftp.example.com")
+	    >>> fs.login("username", "passwd")
+	    >>> fs.get(["f1", "f2"])
 	"""
 	READ_BLOCK_SIZE = 1024 * 1024
 
@@ -805,8 +810,6 @@ class FtpSession:
 			# TODO: only delte path from cache
 			self.file_info_cache.del_path_info()
 
-
-
 	@ftp_command
 	def user(self, args):
 		'''
@@ -845,7 +848,8 @@ class FtpSession:
 		self.username = username
 		self.logged_in = True
 
-	def login(self, username, password, server_path):
+	@ftp_command
+	def login(self, username, password, server_path=""):
 		if self.logged_in:
 			print("Already logged in.", file=self.stdout)
 			return
@@ -928,8 +932,9 @@ class FtpSession:
 			FtpSession.print_usage()
 
 	def run_command(self, cmd_line):
-		""" run a single ftp command received from the ftp_cli module.
-		"""
+		""" run a single ftp command received from the ftp_cli module."""
+
+		# If the command is preceded by a '!', run it on the local machine.
 		if cmd_line[0] == '!':
 			subprocess.call(cmd_line[1:], shell=True)
 			return
@@ -937,11 +942,13 @@ class FtpSession:
 		cmd = cmd_line_split[0]
 		cmd_args = cmd_line_split[1:]
 
+		# If the command implemented by the FTPSession, use the FTPSession implementation.
 		if hasattr(FtpSession, cmd):
 			if not self.logged_in and (cmd != 'user' and cmd != 'quit'):
 				print("Not logged in. Please login first with USER and PASS.")
 				return
 			getattr(FtpSession, cmd)(self, cmd_args)
+		# Otherwise, try to run the command on the locally mounted ftp-server.
 		elif self.mountpoint:
 			try:
 				curr_dir = os.getcwd()
