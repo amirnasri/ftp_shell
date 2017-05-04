@@ -420,13 +420,14 @@ class FtpSession:
 		if self.verbose:
 			print("Uploading file %s to the server...\n" % path)
 		f = open(path, "rb")
+		basename = os.path.basename(path)
 		filesize = 0
 		curr_time = time.time()
 		while True:
 			file_data = f.read(FtpSession.READ_BLOCK_SIZE)
 			if file_data == b'':
 				break
-			self._upload_file(path, 0, file_data)
+			self._upload_file(basename, 0, file_data)
 			#if self.transfer_type == 'A':
 			#	file_data = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
 			#self.data_socket.send(file_data)
@@ -443,7 +444,12 @@ class FtpSession:
 			#TODO: only delte path from cache
 			self.file_info_cache.del_path_info()
 		elif os.path.isdir(path):
-			for root, dirnames, filenames in os.walk(path):
+			real_path = os.path.realpath(path)
+			dirname = os.path.dirname(real_path)
+			curr_dir = os.path.realpath('.')
+			os.chdir(dirname)
+			print("---" +os.path.basename(real_path))
+			for root, dirnames, filenames in os.walk(os.path.basename(real_path)):
 				if root:
 					self.send_raw_command("MKD %s\r\n" % root)
 					try:
@@ -451,8 +457,12 @@ class FtpSession:
 					except response_error:
 						print("put: cannot create remote directory '%s'." % root, file=self.stdout)
 						return
+					finally:
+						os.chdir(curr_dir)
 				for f in filenames:
 					self.upload_file(os.path.join(root, f))
+			os.chdir(curr_dir)
+
 			# TODO: only delte path from cache
 			self.file_info_cache.del_path_info()
 		else:
