@@ -51,7 +51,7 @@ class FtpSession:
 	    >>> fs.login("username", "passwd")
 	    >>> fs.get(["f1", "f2"])
 	"""
-	READ_BLOCK_SIZE = 1024 * 1024
+	READ_BLOCK_SIZE = 1 << 20
 
 	def __init__(self, server, port=21):
 		"""
@@ -370,12 +370,12 @@ class FtpSession:
 				f.close()
 				mm_file.close()
 
-	def _upload_file(self, path, offset, file_data):
-		"""Upload a single file to location `path` on the server.
+	def _upload_file(self, remote_path, offset, file_data):
+		"""Upload a single file to location `remote_path` on the server.
 
 		Args:
-		    path (str): path of the file to the uploaded. The
-		        path can be absolute or relative to the current server directory.
+		    remote_path (str): path where the file is to be uploaded. The
+		        path can be absolute or relative to the server current directory.
 		    offset (int): file position to start the upload.
 		    #TODO: check file data type
 		    file_data (bytes): A buffer containing the contents of the file.
@@ -385,7 +385,7 @@ class FtpSession:
 		# If transfer type is not set, send TYPE command depending on the type of the file
 		# (TYPE A for ascii files and TYPE I for binary files)
 		transfer_type = self.transfer_type
-		file_ext = self.get_file_ext(path)
+		file_ext = self.get_file_ext(remote_path)
 		if transfer_type is None:
 			if file_ext != '' and file_ext in self.text_file_extensions:
 				transfer_type = 'A'
@@ -398,14 +398,15 @@ class FtpSession:
 			print("TYPE command failed.", file=self.stdout)
 			raise
 
-		self.send_raw_command("REST %d\r\n" % offset)
-		try:
-			self.get_resp()
-		except response_error:
-			print("REST command failed.", file=self.stdout)
-			raise
+		if offset:
+			self.send_raw_command("REST %d\r\n" % offset)
+			try:
+				self.get_resp()
+			except response_error:
+				print("REST command failed.", file=self.stdout)
+				raise
 
-		self.data_socket = self.setup_data_transfer("STOR %s\r\n" % path)
+		self.data_socket = self.setup_data_transfer("STOR %s\r\n" % remote_path)
 
 		if self.transfer_type == 'A':
 			file_data = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
@@ -416,62 +417,98 @@ class FtpSession:
 		# TODO: only delte path from cache
 		self.file_info_cache.del_path_info()
 
-	def upload_file(self, path):
+	def upload_file(self, local_path, remote_path):
+		""" Upload a single file to the server current directory.
+			Example: d1/d2/f1 will be uploaded at <curr-server-directory>/f1.
+		Args:
+		    local_path (str): path to the local file (relative or absolute).
+		    remote_path (str): path to the remote file (relative or absolute).
+
+		"""
 		if self.verbose:
-			print("Uploading file %s to the server...\n" % path)
-		f = open(path, "rb")
-		basename = os.path.basename(path)
-		filesize = 0
+			print("Uploading file %s to the server...\n" % local_path)
+		print("cwd2=%s" % os.getcwd())
+		try:
+			f = open(local_path, "rb")
+		except IOError as e:
+			print(e)
+			return
 		curr_time = time.time()
+		offset = 0
 		while True:
 			file_data = f.read(FtpSession.READ_BLOCK_SIZE)
+			self._upload_file(remote_path, offset, file_data)
 			if file_data == b'':
 				break
-			self._upload_file(basename, 0, file_data)
 			#if self.transfer_type == 'A':
 			#	file_data = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
 			#self.data_socket.send(file_data)
-			filesize += len(file_data)
+			offset += len(file_data)
 		elapsed_time = time.time()- curr_time
 		f.close()
 		if self.verbose:
+			filesize = offset
 			print("%d bytes sent in %f seconds (%.2f b/s)."
 				%(filesize, elapsed_time, FtpSession.calculate_data_rate(filesize, elapsed_time)))
 
-	def upload_path(self, path):
-		if os.path.isfile(path):
-			self.upload_file(path)
+	def upload_path(self, local_path):
+		""" Upload a single local path to the server current directory.
+
+		Args:
+		    local_path (str): path to a local file or folder. Paths may be absolute such as /d1/d2/, /d1/f1
+		    or relative such as d1/d2, d1/f1.
+
+		"""
+		if os.path.isfile(local_path):
+			self.upload_file(local_path, os.path.basename(local_path))
 			#TODO: only delte path from cache
 			self.file_info_cache.del_path_info()
-		elif os.path.isdir(path):
-			real_path = os.path.realpath(path)
+
+		elif os.path.isdir(local_path):
+			real_path = os.path.realpath(local_path)
 			dirname = os.path.dirname(real_path)
 			curr_dir = os.path.realpath('.')
 			os.chdir(dirname)
-			print("---" +os.path.basename(real_path))
+			import pdb
+			print("cwd1=%s" % os.getcwd())
 			for root, dirnames, filenames in os.walk(os.path.basename(real_path)):
+				print(root, dirnames, filenames)
 				if root:
 					self.send_raw_command("MKD %s\r\n" % root)
 					try:
 						self.get_resp()
 					except response_error:
 						print("put: cannot create remote directory '%s'." % root, file=self.stdout)
-						return
-					finally:
 						os.chdir(curr_dir)
+						return
+					except:
+						os.chdir(curr_dir)
+						raise
+
 				for f in filenames:
-					self.upload_file(os.path.join(root, f))
+					file_path = os.path.join(root, f)
+					self.upload_file(file_path, file_path)
 			os.chdir(curr_dir)
 
 			# TODO: only delte path from cache
 			self.file_info_cache.del_path_info()
 		else:
-			print("put: cannot access local file '%s'. No such file or directory." % path, file=self.stdout)
+			print("put: cannot access local file '%s'. No such file or directory." % local_path, file=self.stdout)
 
 	@ftp_command
 	def put(self, args):
-		"""	usage: put local-file(s) """
+		"""	usage: put local-path(s)
+
+			Args:
+				args (iterable of str): list of local-paths to be uploaded. Paths can point to
+				either directories or files and may contain wildcards.
+
+		"""
 		paths = args
+		# Expand paths using local shell.
+		# TODO: use python globbing functions instead.
+		# After expanding we can have absolute paths like /d1/d2/, /d1/f1 or relative paths
+		# like d1/d2, d1/f1.
 		expanded_paths = subprocess.check_output("echo %s" % " ".join(paths), shell=True).strip().split()
 		for path in expanded_paths:
 			#self.upload_path(path.decode("utf-8"))
