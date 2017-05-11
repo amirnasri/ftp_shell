@@ -30,9 +30,6 @@ class FileInfoCache(object):
 	def parse_ls_line(line):
 		# -rwxr--r-- 1 amir amir 600 Mar  6 00:28 a.py*
 		fields = line.split()
-		from .ftp_session import print_blue
-		print_blue((repr(line), len(line)))
-		print_blue(repr(fields))
 		file_stat = dict()
 		file_stat["st_mode"] = FileInfoCache.get_file_mode(fields[0])
 		file_stat["st_atime"] = 0
@@ -44,6 +41,8 @@ class FileInfoCache(object):
 		file_stat["st_uid"] = os.getuid()
 		file_stat["st_gid"] = os.getgid()
 		file_stat["st_size"] = int(fields[4])
+		# regex = re.compile(r'^((\S+\s+){8})(.*)')
+		# filename = FileInfoCache.regex.search(line).groups()[2]
 		return " ".join(fields[8:]), file_stat
 
 	@staticmethod

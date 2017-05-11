@@ -47,7 +47,7 @@ class FtpSession:
 	the low level raw ftp commands such as RETR, STOR, and LIST.
 
 	Example:
-	    >>> fs = FTPSession("ftp.example.com")
+	    >>> fs = FtpSession("ftp.example.com")
 	    >>> fs.login("username", "passwd")
 	    >>> fs.get(["f1", "f2"])
 	"""
@@ -72,7 +72,6 @@ class FtpSession:
 		self.devnull = open(os.devnull, "wb")
 		self.shared_dict = Manager().dict()
 		self.init_session()
-
 
 	def init_session(self):
 		self.shared_dict['cwd'] = ''
@@ -583,6 +582,7 @@ class FtpSession:
 				ls_data = ""
 				while True:
 					ls_data_ = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE)#.decode('utf-8', 'ignore')
+					print(print_blue(ls_data_))
 					if ls_data_ == "":
 						break
 					ls_data += ls_data_
@@ -743,10 +743,11 @@ class FtpSession:
 
 	def rmdir(self, path):
 		ls_data = self.get_path_info(path)['ls_data']
+		regex = re.compile(r'^((\S+\s+){8})(.*)')
 		for ls_line in ls_data.split('\r\n'):
 			if len(ls_line) == 0:
 				continue
-			filename = ls_line.split()[-1]
+			filename = regex.search(ls_line).groups()[2]
 			if filename == '.' or filename == '..':
 				continue
 			if ls_line[0] == 'd':
@@ -805,11 +806,11 @@ class FtpSession:
 		self.send_raw_command("MKD %s\r\n" % new_path)
 		self.get_resp()
 		ls_data = self.get_path_info(old_path)['ls_data']
-
+		regex = re.compile(r'^((\S+\s+){8})(.*)')
 		for ls_line in ls_data.split('\r\n'):
 			if len(ls_line) == 0:
 				continue
-			filename = ls_line.split()[-1]
+			filename = regex.search(ls_line).groups()[2]
 			if filename == '.' or filename == '..':
 				continue
 			old_path_ = os.path.join(old_path, filename)
