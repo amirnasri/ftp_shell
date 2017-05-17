@@ -3,9 +3,13 @@ import os
 import sys
 import socket
 import readline
+import subprocess
+import traceback
 from .ftp import ftp_session
 from .ftp.ftp_parser import parse_response_error
+from .ftp.ftp_session import FtpSession
 from .ftp.ftp_session import login_error
+from .ftp.ftp_session import cmd_not_implemented_error
 from .ftp.ftp_session import LsColors
 
 class cli_error(Exception): pass
@@ -71,6 +75,39 @@ class FtpCli:
         else:
             return '%s->%s ' % (LsColors.OKGREEN, LsColors.ENDC)
 
+    def run_command(self, cmd_line):
+        """ run a single ftp command on the current ftp session."""
+
+        # If the command is preceded by a '!', run it on the local machine.
+        if cmd_line[0] == '!':
+            subprocess.call(cmd_line[1:], shell=True)
+            return
+        cmd_line_split = cmd_line.split()
+        cmd = cmd_line_split[0]
+        cmd_args = cmd_line_split[1:]
+
+        # If the command implemented by the FTPSession, use the FTPSession implementation.
+        if hasattr(FtpSession, cmd):
+            if not self.ftp.logged_in and (cmd != 'user' and cmd != 'quit'):
+                print("Not logged in. Please login first with USER and PASS.")
+                return
+            getattr(FtpSession, cmd)(self.ftp, cmd_args)
+        # Otherwise, try to run the command on the locally mounted ftp-server.
+        elif self.ftp.mountpoint:
+            curr_dir = os.getcwd()
+            os.chdir(self.ftp.mountpoint)
+            # print("calling %s on %s" % (cmd_line, self.mountpoint))
+            try:
+                subprocess.check_call(cmd_line, shell=True)  # , stderr=self.devnull
+                # print("return successfully")
+            except subprocess.CalledProcessError:
+                # raise cmd_not_implemented_error
+                pass
+            finally:
+                os.chdir(curr_dir)
+        else:
+            raise cmd_not_implemented_error
+
     def proc_cli(self):
         """ Create an ftp-session and start by logging to the server
         using the user credentials. Then read the input commands from
@@ -92,7 +129,7 @@ class FtpCli:
                         try:
                             # Delegate processing of input command to the
                             # ftp session.
-                            self.ftp.run_command(cmd_line)
+                            self.run_command(cmd_line)
                         except ftp_session.response_error:
                             pass
 
@@ -111,6 +148,14 @@ class FtpCli:
             except ftp_session.quit_error:
                 print("Goodbye.")
                 break
+            '''
+            except:
+                print("An unpexpectd error happened with the following stack trace:\n")
+                traceback.print_exc()
+                print("\nClosing ftp session.")
+                break
+            '''
+        self.ftp.close()
 
 class Completer(object):
     """ Class to provide tab-completion functionality

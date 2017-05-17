@@ -8,6 +8,7 @@ stand-alone ftp-session as described in class documentation.
 """
 from __future__ import print_function
 import sys, os, re, subprocess, inspect
+import signal
 import socket
 import time
 import types
@@ -71,6 +72,7 @@ class FtpSession:
 		self.mountpoint = None
 		self.devnull = open(os.devnull, "wb")
 		self.shared_dict = Manager().dict()
+		self.fuse_process = None
 		self.init_session()
 
 	def init_session(self):
@@ -436,9 +438,9 @@ class FtpSession:
 		offset = 0
 		while True:
 			file_data = f.read(FtpSession.READ_BLOCK_SIZE)
-			self._upload_file(remote_path, offset, file_data)
 			if file_data == b'':
 				break
+			self._upload_file(remote_path, offset, file_data)
 			#if self.transfer_type == 'A':
 			#	file_data = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
 			#self.data_socket.send(file_data)
@@ -574,6 +576,14 @@ class FtpSession:
 			super(FtpSession.LsDataThread, self).__init__()
 			self.name = name
 			self.data_socket = data_socket
+			# In response to LIST command, some servers do not close the data connection
+			# after data transfer is complete. Possibly they assume the response to LIST
+			# is small and fits in one packet. So the client can close the connection after
+			# receiving the first packet.
+			# To make ls work for these servers, set the data socket to non-blocking, so that
+			# read any data that is available in the socket without blocking and then close
+			# the connection.
+			data_socket.setblocking(False)
 			self.ls_data = ""
 
 		def run(self):
@@ -582,7 +592,6 @@ class FtpSession:
 				ls_data = ""
 				while True:
 					ls_data_ = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE)#.decode('utf-8', 'ignore')
-					print(print_blue(ls_data_))
 					if ls_data_ == "":
 						break
 					ls_data += ls_data_
@@ -590,6 +599,7 @@ class FtpSession:
 				self.ls_data = ls_data
 			except BaseException as e:
 				print("Received unpexpected exception '%s'." % e.__class__.__name__)
+			self.data_socket.close()
 			print("Exiting " + self.name)
 
 	def _ls(self, path, verbose = False):
@@ -769,7 +779,6 @@ class FtpSession:
 
 	def path_exists(self, path):
 		path_info = self.get_path_info(path)
-		print(print_blue(path_info))
 		return path_info is not None
 
 	def is_path_dir(self, path):
@@ -933,7 +942,7 @@ class FtpSession:
 		self.username = username
 		self.logged_in = True
 
-		self.mountpoint = os.path.expanduser('~/.ftpshell1')
+		self.mountpoint = os.path.expanduser('~/.ftpshell4')
 		'''
 		pid = os.fork()
 		if not pid:
@@ -946,10 +955,29 @@ class FtpSession:
 
 		def run_fuse(self):
 			sys.stdout = sys.stderr = open(os.devnull, "w")
-			FUSE(FtpFuse(self), self.mountpoint, nothreads=True, foreground=True)
+			print("fuse before")
+			try:
+				FUSE(FtpFuse(self), self.mountpoint, nothreads=True, foreground=True)
+			except RuntimeError:
+				print("runtoirj*************")
+				subprocess.call(["fusermount", "-u", self.mountpoint], shell=False)
+				FUSE(FtpFuse(self), self.mountpoint, nothreads=True, foreground=True)
 
-		fp = Process(target=run_fuse, args=(self,))
-		fp.start()
+		#fuse_process = Process(target=run_fuse, args=(self,))
+		#fuse_process.start()
+		#print("started fuse process, pid=%d" % fuse_process.pid)
+		#self.fuse_process = fuse_process
+
+	def close(self):
+		# Terminate the fuse process
+		if self.fuse_process:
+			try:
+				print("terminating fuse process, pid=%d" % self.fuse_process.pid)
+				os.kill(self.fuse_process.pid, signal.SIGINT)
+				self.fuse_process.join()
+			except:
+				pass
+		print("process joined")
 
 	@ftp_command
 	def quit(self, args):
@@ -978,38 +1006,6 @@ class FtpSession:
 			print()
 		else:
 			FtpSession.print_usage()
-
-	def run_command(self, cmd_line):
-		""" run a single ftp command received from the ftp_cli module."""
-
-		# If the command is preceded by a '!', run it on the local machine.
-		if cmd_line[0] == '!':
-			subprocess.call(cmd_line[1:], shell=True)
-			return
-		cmd_line_split = cmd_line.split()
-		cmd = cmd_line_split[0]
-		cmd_args = cmd_line_split[1:]
-
-		# If the command implemented by the FTPSession, use the FTPSession implementation.
-		if hasattr(FtpSession, cmd):
-			if not self.logged_in and (cmd != 'user' and cmd != 'quit'):
-				print("Not logged in. Please login first with USER and PASS.")
-				return
-			getattr(FtpSession, cmd)(self, cmd_args)
-		# Otherwise, try to run the command on the locally mounted ftp-server.
-		elif self.mountpoint:
-			try:
-				curr_dir = os.getcwd()
-				os.chdir(self.mountpoint)
-				#print("calling %s on %s" % (cmd_line, self.mountpoint))
-				subprocess.check_call(cmd_line, shell=True) #, stderr=self.devnull
-				#print("return successfully")
-				os.chdir(curr_dir)
-			except subprocess.CalledProcessError:
-				#raise cmd_not_implemented_error
-				pass
-		else:
-			raise cmd_not_implemented_error
 
 def check_args(f):
 	def new_f(*args, **kwargs):
