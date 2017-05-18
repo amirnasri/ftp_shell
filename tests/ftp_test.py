@@ -3,17 +3,17 @@ import subprocess
 import sys
 from ftpshell.ftp.ftp_session import FtpSession
 
-def subprocess_call(cmd):
-	subprocess.call(cmd.split(), shell=False)
+def subprocess_check_call(cmd):
+	subprocess.check_call(cmd.split(), shell=False)
 
 def test_ftp_get():
 	test_file = "ftp-test-file"
 	os.system("echo abcd > /tmp/%s" % test_file)
-	#fs = FtpSession("172.18.2.169")
-	fs = FtpSession("localhost")
+	fs = FtpSession("172.18.2.169")
+	#fs = FtpSession("localhost")
 	try:
 		fs.login("anonymous", "p")
-		#fs.cd(["upload/anasri"])
+		fs.cd(["upload/anasri"])
 		fs.rm([test_file])
 		fs.put(["/tmp/" + test_file])
 		save_stdout = sys.stdout
@@ -21,14 +21,38 @@ def test_ftp_get():
 		fs.ls([])
 		sys.stdout = save_stdout
 		try:
-			subprocess.check_call(("grep %s /tmp/stdout" % test_file).split())
+			subprocess_check_call("grep %s /tmp/stdout" % test_file)
+			os.system("rm /tmp/stdout")
+			subprocess_check_call("mv /tmp/%s /tmp/%s_copy" % (test_file, test_file))
+			fs.get([test_file])
+			subprocess_check_call("diff ./%s /tmp/%s_copy" % (test_file, test_file))
 		except OSError:
 			assert False
-		os.system("rm /tmp/stdout")
-		subprocess_call("mv /tmp/%s /tmp/%s_copy" % (test_file, test_file))
-		fs.get([test_file])
 	except:
 		raise
 	finally:
 		fs.close()
-	#assert 1 == 1
+"""
+	Test cases:
+
+	put dir
+	put file
+	put /dir
+	put /file
+	put dir file /dir /file
+
+	transfer large_file with time measurement
+
+	move dir1 dir2
+	move /dir1 /dir2
+
+	remove dir1 dir2
+	remove /dir1 /dir2
+
+	different servers
+
+	active passive
+
+
+
+"""

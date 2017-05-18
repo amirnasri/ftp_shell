@@ -583,7 +583,7 @@ class FtpSession:
 			# To make ls work for these servers, set the data socket to non-blocking, so that
 			# read any data that is available in the socket without blocking and then close
 			# the connection.
-			data_socket.setblocking(False)
+			#data_socket.setblocking(False)
 			self.ls_data = ""
 
 		def run(self):
@@ -632,9 +632,8 @@ class FtpSession:
 		except response_error:
 			if self.data_socket:
 				self.data_socket.close()
-			print("ls: cannot access remote directory '%s'. No such file or directory." % filename, file=self.stdout)
+			print("ls: cannot access remote directory '%s'. No such file or directory." % path, file=self.stdout)
 			return
-
 		if path_info is None:
 			#try:
 			#	list(map(lambda x: x.split()[-1] if x else x, self._ls(os.path.dirname(filename), True).split('\r\n'))).index(filename)
@@ -954,7 +953,7 @@ class FtpSession:
 		'''
 
 		def run_fuse(self):
-			sys.stdout = sys.stderr = open(os.devnull, "w")
+			#sys.stdout = sys.stderr = open(os.devnull, "w")
 			print("fuse before")
 			try:
 				FUSE(FtpFuse(self), self.mountpoint, nothreads=True, foreground=True)
@@ -963,10 +962,10 @@ class FtpSession:
 				subprocess.call(["fusermount", "-u", self.mountpoint], shell=False)
 				FUSE(FtpFuse(self), self.mountpoint, nothreads=True, foreground=True)
 
-		#fuse_process = Process(target=run_fuse, args=(self,))
-		#fuse_process.start()
-		#print("started fuse process, pid=%d" % fuse_process.pid)
-		#self.fuse_process = fuse_process
+		fuse_process = Process(target=run_fuse, args=(self,))
+		fuse_process.start()
+		print("started fuse process, pid=%d" % fuse_process.pid)
+		self.fuse_process = fuse_process
 
 	def close(self):
 		# Terminate the fuse process
@@ -974,6 +973,7 @@ class FtpSession:
 			try:
 				print("terminating fuse process, pid=%d" % self.fuse_process.pid)
 				os.kill(self.fuse_process.pid, signal.SIGINT)
+				subprocess.call(["fusermount", "-u", self.mountpoint], shell=False)
 				self.fuse_process.join()
 			except:
 				pass
