@@ -21,31 +21,39 @@ def ftp_mount(ftp, mountpoint, base_dir=None):
 
 	       mountpoint (str): Path to the directory whrere the ftp session
 	       is to be mounted.
+
+	       base_dir (str): Absolute path of the directory on the ftp server
+	          to be mounted. If not provided, defaults to current server
+	          directory.
 	"""
 
-	def run_fuse():
+	def run_fuse(mountpoint):
 		#sys.stdout = sys.stderr = open(os.devnull, "w")
 		print("fuse before")
+		print("-------------%s" % ftp.shared_dict)
 		try:
+			mp_created = False
+			if not os.path.exists(mountpoint):
+				os.mkdir(mountpoint)
+				mp_created = True
+			mountpoint = os.path.abspath(mountpoint)
+			# FUSE(FtpFuse(ftp), mountpoint, nothreads=True, foreground=True)
+
 			FUSE(FtpFuse(ftp), mountpoint, nothreads=True, foreground=True)
 		except RuntimeError:
 			print("runtoirj*************")
 			subprocess.call(["fusermount", "-u", mountpoint], shell=False)
 			FUSE(FtpFuse(ftp), mountpoint, nothreads=True, foreground=True)
+		finally:
+			if mp_created:
+				os.rmdir(mountpoint)
 
-	mp_created = False
-	if not os.path.exists(mountpoint):
-		os.mkdir(mountpoint)
-		mp_created = True
-	mountpoint = os.path.abspath(mountpoint)
-	#FUSE(FtpFuse(ftp), mountpoint, nothreads=True, foreground=True)
-	if mp_created:
-		os.rmdir(mountpoint)
 
-	fuse_process = Process(target=run_fuse, args=tuple())
+	fuse_process = Process(target=run_fuse, args=(mountpoint,))
 	fuse_process.start()
 	print("started fuse process, pid=%d" % fuse_process.pid)
 	#self.fuse_process = fuse_process
+	return fuse_process
 
 
 def main():
@@ -53,7 +61,6 @@ def main():
 		usage = 'Usage: ftpshell [username[:password]@]server[:port] mountpoint'
 		server, port, server_path, username, password, mountpoint = proc_input_args(usage)
 		ftp = ftp_session.FtpSession(server, port)
-		print("-------------%s" % ftp.shared_dict)
 		ftp.login(username, password, server_path)
 	except cli_error:
 		return
@@ -63,36 +70,10 @@ def main():
 		ftp.close_server()
 		print("Connection was closed by the server.")
 	print("Running fuse! %s" % ftp.get_cwd())
-
-	def run_fuse(self):
-		#sys.stdout = sys.stderr = open(os.devnull, "w")
-		print("fuse before")
-		try:
-			FUSE(FtpFuse(self), self.mountpoint, nothreads=True, foreground=True)
-		except RuntimeError:
-			print("runtoirj*************")
-			subprocess.call(["fusermount", "-u", self.mountpoint], shell=False)
-			FUSE(FtpFuse(self), self.mountpoint, nothreads=True, foreground=True)
-
-	mp_created = False
-	if not os.path.exists(mountpoint):
-		os.mkdir(mountpoint)
-		mp_created = True
-	mountpoint = os.path.abspath(mountpoint)
-	# FUSE(FtpFuse(ftp, ftp.get_cwd()), mountpoint, nothreads=True, foreground=True)
-	if mp_created:
-		os.rmdir(mountpoint)
-
-	# fuse_process = Process(target=run_fuse, args=(self,))
-	# fuse_process.start()
-	# print("started fuse process, pid=%d" % fuse_process.pid)
-	# self.fuse_process = fuse_process
-
-
-
+	fuse_process = ftp_mount(ftp, mountpoint)
+	fuse_process.join()
 
 	'''
-
 	pid = os.fork()
 	if not pid:
 		# Child process
