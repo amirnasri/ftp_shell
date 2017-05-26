@@ -42,6 +42,8 @@ class FtpFuse(Operations):
 		print('base_dir=%s' % base_dir)
 		if base_dir and not ftp_session.path_exists(base_dir):
 			raise path_not_found_error("path %s does not exist on the server." % base_dir)
+		if not base_dir:
+			base_dir = ftp_session.get_cwd()
 		self.base_dir = base_dir
 		self.curr_file = None
 

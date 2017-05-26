@@ -953,7 +953,7 @@ class FtpSession:
 		'''
 
 		def run_fuse(self):
-			#sys.stdout = sys.stderr = open(os.devnull, "w")
+			sys.stdout = sys.stderr = open(os.devnull, "w")
 			print("fuse before")
 			try:
 				FUSE(FtpFuse(self), self.mountpoint, nothreads=True, foreground=True)
@@ -962,10 +962,12 @@ class FtpSession:
 				subprocess.call(["fusermount", "-u", self.mountpoint], shell=False)
 				FUSE(FtpFuse(self), self.mountpoint, nothreads=True, foreground=True)
 
-		fuse_process = Process(target=run_fuse, args=(self,))
-		fuse_process.start()
-		print("started fuse process, pid=%d" % fuse_process.pid)
-		self.fuse_process = fuse_process
+
+		#fuse_process = Process(target=run_fuse, args=(self,))
+		#fuse_process.start()
+		#print("started fuse process, pid=%d" % fuse_process.pid)
+		#self.fuse_process = fuse_process
+
 
 	def close(self):
 		# Terminate the fuse process

@@ -16,10 +16,10 @@ def test_ftp_get():
 		fs.cd(["upload/anasri"])
 		fs.rm([test_file])
 		fs.put(["/tmp/" + test_file])
-		save_stdout = sys.stdout
-		sys.stdout = open("/tmp/stdout", "w")
+		#save_stdout = sys.stdout
+		#sys.stdout = open("/tmp/stdout", "w")
 		fs.ls([])
-		sys.stdout = save_stdout
+		#sys.stdout = save_stdout
 		try:
 			subprocess_check_call("grep %s /tmp/stdout" % test_file)
 			os.system("rm /tmp/stdout")
@@ -51,7 +51,7 @@ def test_ftp_get():
 
 	different servers
 
-	active passive
+	active passives
 
 
 
