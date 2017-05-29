@@ -10,9 +10,12 @@ class path_not_found_error(Exception): pass
 
 threadLock = threading.Lock()
 
+def _print(*args, **kwargs):
+	pass
+
 def syncrnoize(f):
 	def new_f(*args, **kwargs):
-		#print("#########acquireing lock " + " called by " + inspect.stack()[1][3])
+		#_print("#########acquireing lock " + " called by " + inspect.stack()[1][3])
 		#threadLock.acquire()
 		#try:
 		ret = f(*args, **kwargs)
@@ -21,7 +24,7 @@ def syncrnoize(f):
 		except Exception as e:
 			pass #raise e
 		finally:
-			#print("#########released lock")
+			#_print("#########released lock")
 		'''
 		#threadLock.release()
 		return ret
@@ -39,7 +42,7 @@ class FtpFuse(Operations):
 			translated to "/usr/ftpuser/p"
 		"""
 		self.fs = ftp_session
-		print('base_dir=%s' % base_dir)
+		_print('base_dir=%s' % base_dir)
 		if base_dir and not ftp_session.path_exists(base_dir):
 			raise path_not_found_error("path %s does not exist on the server." % base_dir)
 		if not base_dir:
@@ -51,13 +54,13 @@ class FtpFuse(Operations):
 		if self.base_dir:
 			return os.path.join(self.base_dir, path[1:])
 		else:
-			return os.path.join(self.fs.shared_dict['cwd'], path[1:])
+			return os.path.join(self.fs.cwd, path[1:])
 
 	@syncrnoize
 	def access(self, path, mode):
 		abs_path = self.abspath(path)
 		access = (self.fs.get_path_info(abs_path)['stat']['st_mode'] >> 6) & mode
-		print("access path=%s, mode=%d, access=%s" % (abs_path, mode, access))
+		_print("access path=%s, mode=%d, access=%s" % (abs_path, mode, access))
 		if not access:
 			raise FuseOSError(errno.EACCES)
 
@@ -65,7 +68,7 @@ class FtpFuse(Operations):
 	@syncrnoize
 	def readdir(self, path, fh):
 		import sys
-		print("readdir path=%s, fh=%d, ver=%s" % (path, fh, sys.version))
+		_print("readdir path=%s, fh=%d, ver=%s" % (path, fh, sys.version))
 		if path is None or path[0] != "/":
 			raise OSError
 		abs_path = self.abspath(path)
@@ -73,18 +76,18 @@ class FtpFuse(Operations):
 		if self.fs.is_path_dir(abs_path):
 			path_info = self.fs.get_path_info(abs_path)
 			dirents.extend([l.split()[-1] for l in path_info['ls_data'].split('\r\n') if len(l) != 0])
-		#print("readdir: dirents=%s " % str(dirents))
+		#_print("readdir: dirents=%s " % str(dirents))
 		for dirent in dirents:
 			yield dirent
 		#return dirents
 
 	@syncrnoize
 	def access(self, path, mode):
-		print("=============access path=%s, mode=%s" % (path, mode))
+		_print("=============access path=%s, mode=%s" % (path, mode))
 		if path is None or path[0] != "/":
 			return FuseOSError(errno.EACCES)
 		abs_path = self.abspath(path)
-		print("=============getattr abs path=%s" % abs_path)
+		_print("=============getattr abs path=%s" % abs_path)
 		path_info = self.fs.get_path_info(abs_path)
 		if path_info is None:
 			raise FuseOSError(errno.EACCES)
@@ -95,7 +98,7 @@ class FtpFuse(Operations):
 			raise OSError
 		abs_path = self.abspath(path)
 		path_info = self.fs.get_path_info(abs_path)
-		print("=============getattr1 path=%s, path_info=%s" % (path, path_info))
+		_print("=============getattr1 path=%s, path_info=%s" % (path, path_info))
 		if path_info is None:
 			raise FuseOSError(errno.ENOENT)
 		return path_info['stat']
@@ -108,7 +111,7 @@ class FtpFuse(Operations):
 		if path is None or path[0] != "/":
 			raise OSError
 		abs_path = self.abspath(path)
-		print("=============create abs_path=%s, fh=" % abs_path)
+		_print("=============create abs_path=%s, fh=" % abs_path)
 		self.fs._upload_file(abs_path, 0, b"")
 		if self.curr_file:
 			self.curr_file.close()
@@ -120,7 +123,7 @@ class FtpFuse(Operations):
 		if path is None or path[0] != "/":
 			raise OSError
 		abs_path = self.abspath(path)
-		print("=============open abs_path=%s, fh=" % abs_path)
+		_print("=============open abs_path=%s, fh=" % abs_path)
 		if flags & os.O_CREAT:
 			self.fs._upload_file(abs_path, 0, b"")
 		if self.curr_file:
@@ -133,12 +136,12 @@ class FtpFuse(Operations):
 		if path is None or path[0] != "/":
 			raise OSError
 		abs_path = self.abspath(path)
-		print("=============read abs_path=%s, fh=" % abs_path)
+		_print("=============read abs_path=%s, fh=" % abs_path)
 		if not self.curr_file:
 			file_size = self.fs.size([abs_path])
 			if file_size == 0:
 				return b""
-			print("filesize=%d" % file_size)
+			_print("filesize=%d" % file_size)
 			mm_file = mmap.mmap(-1, file_size)
 			#mm_file.seek(0)
 			self.curr_file = mm_file
@@ -151,7 +154,7 @@ class FtpFuse(Operations):
 		if path is None or path[0] != "/":
 			raise OSError
 		abs_path = self.abspath(path)
-		print("=============write abs_path=%s, fh=" % abs_path)
+		_print("=============write abs_path=%s, fh=" % abs_path)
 		self.fs._upload_file(abs_path, offset, buf)
 		return len(buf)
 
@@ -199,7 +202,7 @@ def dump_args(func):
 		arguments = ', '.join(
 			'%s=%r' % entry
 			for entry in list(zip(argnames,args[:len(argnames)]))+[("args",list(args[len(argnames):]))]+[("kwargs",kwargs)])
-		print("%s(%s)" % (ftp_session.print_blue(fname), arguments))
+		_print("%s(%s)" % (ftp_session.print_blue(fname), arguments))
 		return func(*args, **kwargs)
 	return echo_func
 

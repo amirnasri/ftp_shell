@@ -17,8 +17,8 @@ import threading
 import mmap
 from multiprocessing import Manager, Process
 
-from fuse import FUSE
-from .ftp_fuse import FtpFuse
+#from fuse import FUSE
+#from .ftp_fuse import FtpFuse
 from .ftp_raw import FtpRawRespHandler as FtpRaw, raw_command_error
 from .ftp_parser import parse_response_error
 from .ftp_parser import FtpClientParser
@@ -39,6 +39,7 @@ def ftp_command(f):
 def print_blue(s):
 	return (LsColors.BOLD + LsColors.OKBLUE + "%s" % (s,)  + LsColors.ENDC)
 
+session_counter = 0
 
 class FtpSession:
 	"""Provides function to establish a connection with the server
@@ -54,29 +55,34 @@ class FtpSession:
 	"""
 	READ_BLOCK_SIZE = 1 << 20
 
-	def __init__(self, server, port=21):
+	def __init__(self, server, port=21, verbose=False):
 		"""
 		Args:
 			server (str): domain-name or IP address of the ftp-server.
 			port (int): port number the ftp-server is listening on.
 
 		"""
+		global session_counter
+
 		self.text_file_extensions = set()
 		self.server = server
 		self.port = port
 		self.load_text_file_extensions()
 		self.passive = True
-		self.verbose = True
+		self.verbose = verbose
 		self.file_info_cache = FileInfoCache(self)
 		self.stdout = sys.stderr
 		self.mountpoint = None
 		self.devnull = open(os.devnull, "wb")
-		self.shared_dict = Manager().dict()
+		#self.shared_dict = Manager().dict()
 		self.fuse_process = None
+		self.session_id = session_counter
+		session_counter += 1
 		self.init_session()
+		print("Created session %d" % self.session_id)
 
 	def init_session(self):
-		self.shared_dict['cwd'] = ''
+		self.cwd = ''
 		self.cmd = None
 		self.transfer_type = None
 		self.parser = FtpClientParser()
@@ -152,7 +158,7 @@ class FtpSession:
 	def get_abs_path(self, path):
 		if path.startswith("/"):
 			return os.path.normpath(path)
-		return os.path.normpath(os.path.join(self.shared_dict['cwd'], path))
+		return os.path.normpath(os.path.join(self.cwd, path))
 
 	@staticmethod
 	def calculate_data_rate(filesize, seconds):
@@ -195,8 +201,9 @@ class FtpSession:
 		return file_ext
 
 	def setup_data_transfer(self, data_command):
-		import inspect
-		print("callding setup data transfer " + str(data_command).strip() + " called by " + inspect.stack()[1][3])
+		#import inspect
+		# print("callding setup data transfer " + str(data_command).strip() + " called by " + inspect.stack()[1][3])
+		print("callding setup data transfer ")
 		# To prepare for data transfer, Send PASV (passive transfer mode)
 		# or Port command (active transfer mode).
 		if self.passive:
@@ -278,6 +285,7 @@ class FtpSession:
 			print("TYPE command failed.", file=self.stdout)
 			raise
 
+		print("offset=%s" % offset)
 		if offset != 0:
 			self.send_raw_command("REST %d\r\n" % offset)
 			try:
@@ -648,12 +656,12 @@ class FtpSession:
 	def pwd(self, args=None):
 		self.send_raw_command("PWD\r\n")
 		resp = self.get_resp()
-		self.shared_dict['cwd'] = resp.cwd
+		self.cwd = resp.cwd
 
 	def get_cwd(self):
-		if not self.shared_dict['cwd']:
+		if not self.cwd:
 			self.pwd()
-		return self.shared_dict['cwd']
+		return self.cwd
 
 	@ftp_command
 	def cd(self, args):
@@ -678,7 +686,7 @@ class FtpSession:
 
 			self.send_raw_command("PWD\r\n")
 			resp = self.get_resp()
-			self.shared_dict['cwd'] = resp.cwd
+			self.cwd = resp.cwd
 
 	@ftp_command
 	def lcd(self, args):
@@ -912,7 +920,7 @@ class FtpSession:
 
 		while not username:
 			username = input('Username:')
-		if username == 'anonymous':
+		if username == 'anonymous' and password is None:
 			password = 'guest'
 		if password is None:
 			password = getpass.getpass(prompt='Password:')
@@ -941,7 +949,7 @@ class FtpSession:
 		self.username = username
 		self.logged_in = True
 
-		self.mountpoint = os.path.expanduser('~/.ftpshell4')
+		#self.mountpoint = os.path.expanduser('~/.ftpshell4')
 		'''
 		pid = os.fork()
 		if not pid:
@@ -979,7 +987,7 @@ class FtpSession:
 				self.fuse_process.join()
 			except:
 				pass
-		print("process joined")
+		print("session %d closed" % self.session_id)
 
 	@ftp_command
 	def quit(self, args):
