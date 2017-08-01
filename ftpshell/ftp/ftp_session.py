@@ -17,29 +17,44 @@ import threading
 import mmap
 from multiprocessing import Manager, Process
 
-#from fuse import FUSE
-#from .ftp_fuse import FtpFuse
+# from fuse import FUSE
+# from .ftp_fuse import FtpFuse
 from .ftp_raw import FtpRawRespHandler as FtpRaw, raw_command_error
 from .ftp_parser import parse_response_error
 from .ftp_parser import FtpClientParser
 from .file_info_cache import FileInfoCache
 
+
 class network_error(Exception): pass
+
+
 class cmd_not_implemented_error(Exception): pass
+
+
 class quit_error(Exception): pass
+
+
 class login_error(Exception): pass
+
+
 class response_error(Exception): pass
+
+
 class transfer_complete(Exception): pass
+
 
 def ftp_command(f):
 	f.ftp_command = True
 	return f
 
-#TODO: remove!
+
+# TODO: remove!
 def print_blue(s):
-	return (LsColors.BOLD + LsColors.OKBLUE + "%s" % (s,)  + LsColors.ENDC)
+	return (LsColors.BOLD + LsColors.OKBLUE + "%s" % (s,) + LsColors.ENDC)
+
 
 session_counter = 0
+
 
 class FtpSession:
 	"""Provides function to establish a connection with the server
@@ -74,7 +89,7 @@ class FtpSession:
 		self.stdout = sys.stderr
 		self.mountpoint = None
 		self.devnull = open(os.devnull, "wb")
-		#self.shared_dict = Manager().dict()
+		# self.shared_dict = Manager().dict()
 		self.fuse_process = None
 		self.session_id = session_counter
 		session_counter += 1
@@ -126,7 +141,7 @@ class FtpSession:
 			raise
 		if self.parser.resp_failed(resp):
 			raise response_error
-		#print("got resp: \n" + str(resp))
+		# print("got resp: \n" + str(resp))
 		resp_handler = FtpRaw.get_resp_handler(self.cmd)
 		if resp_handler is not None:
 			resp_handler(resp)
@@ -138,7 +153,6 @@ class FtpSession:
 			print(command.strip())
 		self.client.send(command)
 		self.cmd = command.split()[0].strip()
-
 
 	def load_text_file_extensions(self):
 		try:
@@ -162,10 +176,10 @@ class FtpSession:
 
 	@staticmethod
 	def calculate_data_rate(filesize, seconds):
-		return filesize/seconds
+		return filesize / seconds
 
 	@classmethod
-	def print_usage(cls, fname = None):
+	def print_usage(cls, fname=None):
 		if not fname:
 			fname = inspect.stack()[1][3]
 		if hasattr(cls, fname):
@@ -176,6 +190,7 @@ class FtpSession:
 					p = line.find('usage:')
 					if p != -1:
 						print(line[p:])
+
 	@ftp_command
 	def ascii(self, args):
 		if len(args) != 0:
@@ -201,7 +216,7 @@ class FtpSession:
 		return file_ext
 
 	def setup_data_transfer(self, data_command):
-		#import inspect
+		# import inspect
 		# print("callding setup data transfer " + str(data_command).strip() + " called by " + inspect.stack()[1][3])
 		print("callding setup data transfer ")
 		# To prepare for data transfer, Send PASV (passive transfer mode)
@@ -218,10 +233,10 @@ class FtpSession:
 			data_socket.settimeout(10)
 			data_socket.connect((resp.trans.server_address, resp.trans.server_port))
 			self.send_raw_command(data_command)
-			#thread1 = FtpSession.myThread("Thread-1", self, data_socket, data_command, resp)
-			#thread1.start()
+			# thread1 = FtpSession.myThread("Thread-1", self, data_socket, data_command, resp)
+			# thread1.start()
 			resp = self.get_resp()
-			#thread1.join()
+			# thread1.join()
 			print("resp.resp_code = " + str(resp.resp_code))
 		else:
 			s = socket.socket()
@@ -238,7 +253,7 @@ class FtpSession:
 			if not port:
 				raise network_error("Could not get local port.")
 
-			port_h = int(port/256)
+			port_h = int(port / 256)
 			port_l = port - port_h * 256
 			self.send_raw_command("PORT %s\r\n" % (",".join(ip.split('.') + [str(port_h), str(port_l)])))
 
@@ -256,7 +271,30 @@ class FtpSession:
 				data_socket = None
 		return data_socket
 
-	def download_file(self, path, offset, mm_file):
+	MIN_MMAP_SIZE = 1 << 20
+	def get_mmap_download(self, transfer_type, filename, path):
+		# If transfer type is binary and file size is "large"
+		# use mmap to make transfer more efficient
+		mm_file = None
+		if transfer_type == 'I':
+			file_size = self.size([path])
+			if file_size > FtpSession.MIN_MMAP_SIZE:
+				if filename:
+					f = file(filename, "w+b")
+					f.seek(file_size - 1)
+					f.write('\0')
+					f.close()
+					f = open(filename, "r+b")
+					mm_file = mmap.mmap(f.fileno(), file_size)
+					f.close()
+				else:
+					mm_file = mmap.mmap(-1, file_size)
+		else:
+			mm_file = open(filename, "w+b")
+		return mm_file
+
+
+	def download_file(self, path, offset):
 		"""Download a single file located at `path` on the server.
 
 		Args:
@@ -285,6 +323,9 @@ class FtpSession:
 			print("TYPE command failed.", file=self.stdout)
 			raise
 
+		filename = os.path.basename(path)
+		mm_file = self.get_mmap_download(transfer_type, filename, path)
+
 		print("offset=%s" % offset)
 		if offset != 0:
 			self.send_raw_command("REST %d\r\n" % offset)
@@ -293,6 +334,7 @@ class FtpSession:
 			except response_error:
 				print("REST command failed.", file=self.stdout)
 				raise
+		mm_file.seek(offset)
 
 		self.data_socket = self.setup_data_transfer("RETR %s\r\n" % path)
 
@@ -303,12 +345,13 @@ class FtpSession:
 			if file_data == '':
 				break
 			if transfer_type == 'A':
-				#file_data_ = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
+				# file_data_ = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
 				file_data = file_data.replace('\r\n', '\n')
-			#file_data += file_data_
+			# file_data += file_data_
 			mm_file.write(file_data)
 			tsize += len(file_data)
 			print("tsize = %d, mm_tell=%d" % (tsize, mm_file.tell()))
+		mm_file.close()
 		self.get_resp()
 		self.data_socket.close()
 
@@ -332,7 +375,8 @@ class FtpSession:
 			print("%d bytes received in %f seconds (%.2f b/s)."
 				%(filesize, elapsed_time, FtpSession.calculate_data_rate(filesize, elapsed_time)))
 		"""
-		#return file_data
+
+	# return file_data
 
 
 	@ftp_command
@@ -349,35 +393,35 @@ class FtpSession:
 			raise
 		return resp.size
 
-
 	@ftp_command
 	def get(self, args):
 		""" usage: get path-to-file(s) """
 		paths = args
 		for path in paths:
-			#TODO: Add directory download.
-			#if self.get_path_info(path)['isdir']:
-			#else:
+			# TODO: Add directory download.
+			# if self.get_path_info(path)['isdir']:
+			# else:
 			if self.verbose:
 				print("Requesting file '%s' from the server...\n" % path)
-			filename = os.path.basename(path)
 			f = None
 			mm_file = None
+			# fileno = os.open(filename, os.O_WRONLY | os.O_CREAT)
+			"""
+			f = file(filename, "w+b")
+			file_size = self.size([path])
+			f.seek(file_size - 1)
+			f.write('\0')
+			f.close()
+			f = open(filename, "r+b")
+			mm_file = mmap.mmap(f.fileno(), file_size)
+			"""
 			try:
-				#fileno = os.open(filename, os.O_WRONLY | os.O_CREAT)
-				f = file(filename, "w+b")
-				file_size = self.size([path])
-				f.seek(file_size - 1)
-				f.write('\0')
-				f.close()
-				f = open(filename, "r+b")
-				mm_file = mmap.mmap(f.fileno(), file_size)
-				buff = self.download_file(path, 0, mm_file)
+				buff = self.download_file(path, 0)
 			except response_error:
 				print("get: cannot access remote file '%s'. No such file or directory." % path, file=self.stdout)
-			finally:
-				f.close()
-				mm_file.close()
+			#finally:
+			#	f.close()
+			#	mm_file.close()
 
 	def _upload_file(self, remote_path, offset, file_data):
 		"""Upload a single file to location `remote_path` on the server.
@@ -449,16 +493,16 @@ class FtpSession:
 			if file_data == b'':
 				break
 			self._upload_file(remote_path, offset, file_data)
-			#if self.transfer_type == 'A':
+			# if self.transfer_type == 'A':
 			#	file_data = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
-			#self.data_socket.send(file_data)
+			# self.data_socket.send(file_data)
 			offset += len(file_data)
-		elapsed_time = time.time()- curr_time
+		elapsed_time = time.time() - curr_time
 		f.close()
 		if self.verbose:
 			filesize = offset
 			print("%d bytes sent in %f seconds (%.2f b/s)."
-				%(filesize, elapsed_time, FtpSession.calculate_data_rate(filesize, elapsed_time)))
+			      % (filesize, elapsed_time, FtpSession.calculate_data_rate(filesize, elapsed_time)))
 
 	def upload_path(self, local_path):
 		""" Upload a single local path to the server current directory.
@@ -470,7 +514,7 @@ class FtpSession:
 		"""
 		if os.path.isfile(local_path):
 			self.upload_file(local_path, os.path.basename(local_path))
-			#TODO: only delte path from cache
+			# TODO: only delte path from cache
 			self.file_info_cache.del_path_info()
 
 		elif os.path.isdir(local_path):
@@ -520,17 +564,17 @@ class FtpSession:
 		# like d1/d2, d1/f1.
 		expanded_paths = subprocess.check_output("echo %s" % " ".join(paths), shell=True).strip().split()
 		for path in expanded_paths:
-			#self.upload_path(path.decode("utf-8"))
+			# self.upload_path(path.decode("utf-8"))
 			self.upload_path(path)
 
 	def get_colored_ls_data(self, ls_data):
 		lines = ls_data.split('\r\n')
 		colored_lines = []
 		import re
-		#regex = re.compile()
+		# regex = re.compile()
 
 		for l in lines:
-			#re.sub(r'(d.*\s+(\w+\s+){7})(\w+)')
+			# re.sub(r'(d.*\s+(\w+\s+){7})(\w+)')
 			if l:
 				p = l.rfind(' ')
 				if p == -1:
@@ -591,26 +635,26 @@ class FtpSession:
 			# To make ls work for these servers, set the data socket to non-blocking, so that
 			# read any data that is available in the socket without blocking and then close
 			# the connection.
-			#data_socket.setblocking(False)
+			# data_socket.setblocking(False)
 			self.ls_data = ""
 
 		def run(self):
-			#print("Starting " + self.name)
+			# print("Starting " + self.name)
 			try:
 				ls_data = ""
 				while True:
-					ls_data_ = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE)#.decode('utf-8', 'ignore')
+					ls_data_ = self.data_socket.recv(FtpSession.READ_BLOCK_SIZE)  # .decode('utf-8', 'ignore')
 					if ls_data_ == "":
 						break
 					ls_data += ls_data_
-				#print(ls_data)
+				# print(ls_data)
 				self.ls_data = ls_data
 			except BaseException as e:
 				print("Received unpexpected exception '%s'." % e.__class__.__name__)
 			self.data_socket.close()
 			print("Exiting " + self.name)
 
-	def _ls(self, path, verbose = False):
+	def _ls(self, path, verbose=False):
 		verbose = True
 		save_verbose = self.verbose
 		self.verbose = verbose
@@ -635,7 +679,7 @@ class FtpSession:
 		if len(args) == 1:
 			path = args[0]
 		try:
-			#ls_data = self._ls(self.get_abs_path(filename), self.verbose)
+			# ls_data = self._ls(self.get_abs_path(filename), self.verbose)
 			path_info = self.get_path_info(path)
 		except response_error:
 			if self.data_socket:
@@ -643,9 +687,9 @@ class FtpSession:
 			print("ls: cannot access remote directory '%s'. No such file or directory." % path, file=self.stdout)
 			return
 		if path_info is None:
-			#try:
+			# try:
 			#	list(map(lambda x: x.split()[-1] if x else x, self._ls(os.path.dirname(filename), True).split('\r\n'))).index(filename)
-			#except ValueError:
+			# except ValueError:
 			print("ls: cannot access '%s'. No such file or directory." % path, file=self.stdout)
 			return
 		ls_data = path_info['ls_data']
@@ -817,7 +861,6 @@ class FtpSession:
 			else:
 				self.file_info_cache.del_path_info()
 
-
 	def mvdir(self, old_path, new_path):
 		self.send_raw_command("MKD %s\r\n" % new_path)
 		self.get_resp()
@@ -919,7 +962,7 @@ class FtpSession:
 			return
 
 		while not username:
-			username = input('Username:')
+			username = raw_input('Username:')
 		if username == 'anonymous' and password is None:
 			password = 'guest'
 		if password is None:
@@ -949,7 +992,7 @@ class FtpSession:
 		self.username = username
 		self.logged_in = True
 
-		#self.mountpoint = os.path.expanduser('~/.ftpshell4')
+		# self.mountpoint = os.path.expanduser('~/.ftpshell4')
 		'''
 		pid = os.fork()
 		if not pid:
@@ -971,11 +1014,10 @@ class FtpSession:
 				FUSE(FtpFuse(self), self.mountpoint, nothreads=True, foreground=True)
 
 
-		#fuse_process = Process(target=run_fuse, args=(self,))
-		#fuse_process.start()
-		#print("started fuse process, pid=%d" % fuse_process.pid)
-		#self.fuse_process = fuse_process
-
+			# fuse_process = Process(target=run_fuse, args=(self,))
+			# fuse_process.start()
+			# print("started fuse process, pid=%d" % fuse_process.pid)
+			# self.fuse_process = fuse_process
 
 	def close(self):
 		# Terminate the fuse process
@@ -1010,12 +1052,13 @@ class FtpSession:
 		elif len(args) == 0:
 			print("The following is a list of available commands:")
 			for i, cmd in enumerate(sorted(FtpSession.get_ftp_commands())):
-				print("%-20s" % cmd, end = "")
+				print("%-20s" % cmd, end="")
 				if (i + 1) % 4 == 0:
 					print()
 			print()
 		else:
 			FtpSession.print_usage()
+
 
 def check_args(f):
 	def new_f(*args, **kwargs):
@@ -1031,15 +1074,18 @@ def check_args(f):
 				n_args = len(doc_.split()) - 1
 				print(n_args, args, kwargs)
 				assert n_args == len(args[1]), \
-					"%s expects %d arguments, %d given.\nusage: %s" % (new_f.__code__.co_name, n_args, len(args[1]), doc_)
+					"%s expects %d arguments, %d given.\nusage: %s" % (
+					new_f.__code__.co_name, n_args, len(args[1]), doc_)
 				f(*args, **kwargs)
 
 	return new_f
+
 
 # Type of data transfer on the data channel
 class transfer_type:
 	list = 1
 	file = 2
+
 
 class LsColors:
 	HEADER = '\033[95m'
@@ -1061,14 +1107,15 @@ class LsColors:
 			if m:
 				d[m.group(1)] = ('\033[%sm' % m.group(2))
 
+
 if __name__ == '__main__':
 	ftp = FtpSession("172.18.2.169", 21)
-	#try:
+	# try:
 	ftp.login("anonymous", "p")
 	ftp.ls("upload")
 	ftp.get("upload/anasri/a.txt")
-	#except:
-	#print("login failed.")
+	# except:
+	# print("login failed.")
 
 	ftp.session_close()
 

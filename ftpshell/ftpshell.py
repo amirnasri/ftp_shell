@@ -14,7 +14,7 @@ from .ftp.ftp_session import login_error
 from .ftp.ftp_session import cmd_not_implemented_error
 from .ftp.ftp_session import LsColors
 #from .ftpmount import ftp_mount
-import ftpmount
+from . import ftpmount
 
 class cli_error(Exception): pass
 
@@ -82,7 +82,6 @@ class FtpCli:
     def run_command(self, cmd_line):
         """ run a single ftp command on the current ftp session."""
 
-        print("run_command %s" % cmd_line)
         # If the command is preceded by a '!', run it on the local machine.
         if cmd_line[0] == '!':
             subprocess.call(cmd_line[1:], shell=True)
@@ -129,8 +128,9 @@ class FtpCli:
                     self.mountpoint = os.path.expanduser('~/.ftpshell21')
                     server = server_addr, server_port, server_path
                     user = username, password
-                    self.fuse_process_pid = ftpmount.ftp_mount(server, user, self.mountpoint, use_thread=True)
-                    print("pid=%s" % self.fuse_process_pid)
+                    self.fuse_process_pid = None
+                    #self.fuse_process_pid = ftpmount.ftp_mount(server, user, self.mountpoint, use_thread=True)
+                    #print("pid=%s" % self.fuse_process_pid)
                     self.ftp.login(username, password, server_path)
                 else:
                         cmd_line = raw_input(self.get_prompt())
@@ -167,9 +167,10 @@ class FtpCli:
                 break
             '''
         self.ftp.close()
-        os.kill(self.fuse_process_pid, signal.SIGINT)
-        os.waitpid(self.fuse_process_pid, 0)
-        print("fuse_process joined!")
+        if self.fuse_process_pid:
+            os.kill(self.fuse_process_pid, signal.SIGINT)
+            os.waitpid(self.fuse_process_pid, 0)
+            print("fuse_process joined!")
 
 class Completer(object):
     """ Class to provide tab-completion functionality

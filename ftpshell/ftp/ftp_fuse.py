@@ -191,7 +191,7 @@ class FtpFuse(Operations):
 import types
 import sys
 #TODO: use relative import
-import ftp_session
+from . import ftp_session
 
 
 def dump_args(func):
