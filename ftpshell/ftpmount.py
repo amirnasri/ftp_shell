@@ -10,7 +10,6 @@ from .ftp import ftp_session
 from .ftp.ftp_parser import parse_response_error
 from .ftp.ftp_session import login_error
 from .ftp.ftp_fuse import FtpFuse
-import ftpshell
 #from .ftpshell import proc_input_args
 #from .ftpshell import cli_error
 
@@ -136,6 +135,7 @@ def ftp_connect_mount(server, user, mountpoint):
 
 
 def main():
+	from . import ftpshell
 	try:
 		usage = 'Usage: ftpshell [username[:password]@]server[:port] mountpoint'
 		server_addr, server_port, server_path, username, password, mountpoint = ftpshell.proc_input_args(usage)
