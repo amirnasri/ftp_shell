@@ -263,9 +263,10 @@ class FtpSession:
 		return data_socket
 
 	MIN_MMAP_SIZE = 16
-	def get_mmap_download(self, transfer_type, filename, path):
+	def get_mmap_download(self, transfer_type, path):
 		# If transfer type is binary and file size is "large"
 		# use mmap to make transfer more efficient
+		filename = os.path.basename(path)
 		mm_file = None
 		if transfer_type == 'I':
 			file_size = self.size([path])
@@ -316,8 +317,7 @@ class FtpSession:
 			print("TYPE command failed.", file=self.stdout)
 			raise
 
-		filename = os.path.basename(path)
-		mm_file = self.get_mmap_download(transfer_type, filename, path)
+		mm_file = self.get_mmap_download(transfer_type, path)
 
 		print("offset=%s" % offset)
 		if offset != 0:
@@ -390,16 +390,40 @@ class FtpSession:
 			raise
 		return resp.size
 
+	'''
+	a/b/c/d/e
+
+	a/b/c
+	mkdir c
+	cd c
+	getdir d
+	'''
+
+	def download_dir(self, path):
+		if path and path[-1] == '/':
+			path = path[:-1]
+
+		basename = os.path.basename(path)
+		os.mkdir(basename)
+		os.chdir(basename)
+		path_info = self.get_path_info(path)
+		filenames = path_info['filenames']
+		dirnames = path_info['dirnames']
+		for filename in filenames:
+			self.download_file(os.path.join(path, filename), 0)
+		for dirname in dirnames:
+			self.download_dir(os.path.join(path, dirname))
+
+
 	@ftp_command
 	def get(self, args):
 		""" usage: get path-to-file(s) """
+		if len(args) == 0:
+			FtpSession.print_usage()
+			return
+
 		paths = args
 		for path in paths:
-			# TODO: Add directory download.
-			# if self.get_path_info(path)['isdir']:
-			# else:
-			if self.verbose:
-				print("Requesting file '%s' from the server...\n" % path)
 			f = None
 			mm_file = None
 			# fileno = os.open(filename, os.O_WRONLY | os.O_CREAT)
@@ -413,12 +437,17 @@ class FtpSession:
 			mm_file = mmap.mmap(f.fileno(), file_size)
 			"""
 			try:
-				buff = self.download_file(path, 0)
+				isdir = self.is_path_dir(path)
+			except response_error:
+				continue
+			try:
+				if isdir:
+					self.download_dir(path)
+				else:
+					self.download_file(path, 0)
 			except response_error:
 				print("get: cannot access remote file '%s'. No such file or directory." % path, file=self.stdout)
-			#finally:
-			#	f.close()
-			#	mm_file.close()
+
 
 	def _upload_file(self, remote_path, offset, file_data):
 		"""Upload a single file to location `remote_path` on the server.
@@ -795,7 +824,7 @@ class FtpSession:
 		self.file_info_cache.del_path_info()
 
 	def rmdir(self, path):
-		ls_data = self.get_path_info(path)['ls_data']
+		"""ls_data = self.get_path_info(path)['ls_data']
 		regex = re.compile(r'^((\S+\s+){8})(.*)')
 		for ls_line in ls_data.split('\r\n'):
 			if len(ls_line) == 0:
@@ -807,6 +836,14 @@ class FtpSession:
 				self.rmdir(os.path.join(path, filename))
 			else:
 				self.rmfile(os.path.join(path, filename))
+		"""
+		path_info = self.get_path_info(path)
+		filenames = path_info['filenames']
+		dirnames = path_info['dirnames']
+		for filename in filenames:
+			self.rmfile(os.path.join(path, filename))
+		for dirname in dirnames:
+			self.rmdir(os.path.join(path, dirname))
 
 		self.send_raw_command("RMD %s\r\n" % path)
 		self.get_resp()
@@ -857,7 +894,7 @@ class FtpSession:
 	def mvdir(self, old_path, new_path):
 		self.send_raw_command("MKD %s\r\n" % new_path)
 		self.get_resp()
-		ls_data = self.get_path_info(old_path)['ls_data']
+		"""ls_data = self.get_path_info(old_path)['ls_data']
 		regex = re.compile(r'^((\S+\s+){8})(.*)')
 		for ls_line in ls_data.split('\r\n'):
 			if len(ls_line) == 0:
@@ -873,6 +910,19 @@ class FtpSession:
 			else:
 				mv_func = self.mvfile
 			mv_func(old_path_, new_path_)
+		"""
+		path_info = self.get_path_info(old_path)
+		filenames = path_info['filenames']
+		dirnames = path_info['dirnames']
+		print(filenames, dirnames)
+		for filename in filenames:
+			old_path_ = os.path.join(old_path, filename)
+			new_path_ = os.path.join(new_path, filename)
+			self.mvfile(old_path_, new_path_)
+		for dirname in dirnames:
+			old_path_ = os.path.join(old_path, dirname)
+			new_path_ = os.path.join(new_path, dirname)
+			self.mvdir(old_path_, new_path_)
 
 		self.send_raw_command("RMD %s\r\n" % old_path)
 		self.get_resp()

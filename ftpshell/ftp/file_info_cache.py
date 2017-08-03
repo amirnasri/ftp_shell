@@ -73,7 +73,6 @@ class FileInfoCache(object):
 		else:
 			v['stat'] = list(file_stats.values())[0][0]
 			v['isdir'] = False
-
 		self.cache[abs_path] = v
 		#print("added (%s, %s) to cache " % (abs_path, v))
 
@@ -81,17 +80,22 @@ class FileInfoCache(object):
 		# on a directory.
 		#print(file_stats)
 		if isdir:
+			v['dirnames'] = []
+			v['filenames'] = []
 			for filename, (stat, l) in file_stats.items():
 				# Don't cache directories since we don't have
 				# ls_data for them.
 				if not l.startswith('d'):
-					v = dict()
-					v['stat'] = stat
-					v['isdir'] = False
-					v['ls_data'] = l
+					v_sub = dict()
+					v_sub['stat'] = stat
+					v_sub['isdir'] = False
+					v_sub['ls_data'] = l
 					abs_path_ = os.path.join(abs_path, filename)
-					self.cache[abs_path_] = v
+					self.cache[abs_path_] = v_sub
+					v['filenames'].append(filename)
 					#print("added (%s, %s) to cache " % (abs_path_, v))
+				elif filename[0] != '.':
+					v['dirnames'].append(filename)
 
 	def get_path_info(self, path):
 		return self.cache[self.fs.get_abs_path(path)]
