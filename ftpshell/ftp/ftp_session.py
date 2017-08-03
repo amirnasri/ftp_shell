@@ -20,6 +20,7 @@ from multiprocessing import Manager, Process
 # from fuse import FUSE
 # from .ftp_fuse import FtpFuse
 from .ftp_raw import FtpRawRespHandler as FtpRaw
+from .ftp_raw import raw_command_error
 from .ftp_parser import parse_response_error
 from .ftp_parser import FtpClientParser
 from .file_info_cache import FileInfoCache
