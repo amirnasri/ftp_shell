@@ -8,7 +8,7 @@ import readline
 import subprocess
 import traceback
 from .ftp import ftp_session
-from .ftp.ftp_parser import parse_response_error
+from .ftp.ftp_parser import parse_response_error, connection_closed_error
 from .ftp.ftp_session import FtpSession
 from .ftp.ftp_session import login_error
 from .ftp.ftp_session import cmd_not_implemented_error
@@ -148,7 +148,7 @@ class FtpCli:
                 print("Login failed.")
             except ftp_session.cmd_not_implemented_error:
                 print("Command not recognized. Please use 'help' to see a list of available commands.")
-            except (socket.error, parse_response_error, ftp_session.network_error):
+            except (socket.error, parse_response_error, connection_closed_error, ftp_session.network_error):
                 self.ftp.close_server()
                 print("Connection was closed by the server.")
             except KeyboardInterrupt:

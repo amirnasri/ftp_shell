@@ -19,27 +19,17 @@ from multiprocessing import Manager, Process
 
 # from fuse import FUSE
 # from .ftp_fuse import FtpFuse
-from .ftp_raw import FtpRawRespHandler as FtpRaw, raw_command_error
+from .ftp_raw import FtpRawRespHandler as FtpRaw
 from .ftp_parser import parse_response_error
 from .ftp_parser import FtpClientParser
 from .file_info_cache import FileInfoCache
 
 
 class network_error(Exception): pass
-
-
 class cmd_not_implemented_error(Exception): pass
-
-
 class quit_error(Exception): pass
-
-
 class login_error(Exception): pass
-
-
 class response_error(Exception): pass
-
-
 class transfer_complete(Exception): pass
 
 
@@ -54,7 +44,6 @@ def print_blue(s):
 
 
 session_counter = 0
-
 
 class FtpSession:
 	"""Provides function to establish a connection with the server
@@ -144,7 +133,10 @@ class FtpSession:
 		# print("got resp: \n" + str(resp))
 		resp_handler = FtpRaw.get_resp_handler(self.cmd)
 		if resp_handler is not None:
-			resp_handler(resp)
+			try:
+				resp_handler(resp)
+			except raw_command_error:
+				raise response_error
 
 		return resp
 
@@ -217,8 +209,7 @@ class FtpSession:
 
 	def setup_data_transfer(self, data_command):
 		# import inspect
-		# print("callding setup data transfer " + str(data_command).strip() + " called by " + inspect.stack()[1][3])
-		print("callding setup data transfer ")
+		# print("calling setup data transfer " + str(data_command).strip() + " called by " + inspect.stack()[1][3])
 		# To prepare for data transfer, Send PASV (passive transfer mode)
 		# or Port command (active transfer mode).
 		if self.passive:
@@ -227,7 +218,7 @@ class FtpSession:
 				resp = self.get_resp()
 			except response_error:
 				print("PASV command failed.", file=self.stdout)
-				raise raw_command_error
+				raise
 
 			data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 			data_socket.settimeout(10)
@@ -237,7 +228,6 @@ class FtpSession:
 			# thread1.start()
 			resp = self.get_resp()
 			# thread1.join()
-			print("resp.resp_code = " + str(resp.resp_code))
 		else:
 			s = socket.socket()
 			s.connect(("8.8.8.8", 80))
@@ -261,7 +251,7 @@ class FtpSession:
 				resp = self.get_resp()
 			except response_error:
 				print("PORT command failed.", file=self.stdout)
-				raise raw_command_error
+				raise
 
 			self.send_raw_command(data_command)
 			resp = self.get_resp()
@@ -486,7 +476,6 @@ class FtpSession:
 		"""
 		if self.verbose:
 			print("Uploading file %s to the server...\n" % local_path)
-		print("cwd2=%s" % os.getcwd())
 		try:
 			f = open(local_path, "rb")
 		except IOError as e:
@@ -529,9 +518,7 @@ class FtpSession:
 			curr_dir = os.path.realpath('.')
 			os.chdir(dirname)
 			import pdb
-			print("cwd1=%s" % os.getcwd())
 			for root, dirnames, filenames in os.walk(os.path.basename(real_path)):
-				print(root, dirnames, filenames)
 				if root:
 					self.send_raw_command("MKD %s\r\n" % root)
 					try:
@@ -658,10 +645,8 @@ class FtpSession:
 			except BaseException as e:
 				print("Received unpexpected exception '%s'." % e.__class__.__name__)
 			self.data_socket.close()
-			print("Exiting " + self.name)
 
 	def _ls(self, path, verbose=False):
-		verbose = True
 		save_verbose = self.verbose
 		self.verbose = verbose
 		data_command = "LIST -a %s\r\n" % path
@@ -859,6 +844,7 @@ class FtpSession:
 				if isdir:
 					resp = raw_input("rm: '%s' is a directory. Are you sure you want to remove it? (y/[n])" % path)
 					if (resp == 'y'):
+						print(self.verbose)
 						self.rmdir(path)
 				else:
 					self.rmfile(path)
