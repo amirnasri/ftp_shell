@@ -1,7 +1,7 @@
 import os
 import subprocess
 import sys
-from ftpshell.ftpshell.ftp.ftp_session import FtpSession
+from ..ftpshell.ftp.ftp_session import FtpSession
 
 def subprocess_check_call(cmd):
 	subprocess.check_call(cmd.split(), shell=False)
