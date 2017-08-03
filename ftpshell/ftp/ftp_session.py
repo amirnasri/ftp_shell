@@ -262,7 +262,7 @@ class FtpSession:
 				data_socket = None
 		return data_socket
 
-	MIN_MMAP_SIZE = 16
+	MIN_MMAP_SIZE = 1 << 20
 	def get_mmap_download(self, transfer_type, path):
 		# If transfer type is binary and file size is "large"
 		# use mmap to make transfer more efficient
@@ -372,9 +372,7 @@ class FtpSession:
 			print("%d bytes received in %f seconds (%.2f b/s)."
 				%(filesize, elapsed_time, FtpSession.calculate_data_rate(filesize, elapsed_time)))
 		"""
-
 	# return file_data
-
 
 	@ftp_command
 	def size(self, args):
@@ -404,7 +402,11 @@ class FtpSession:
 			path = path[:-1]
 
 		basename = os.path.basename(path)
-		os.mkdir(basename)
+		try:
+			os.mkdir(basename)
+		except OSError:
+			print("get: cannot create local folder '%s'. Folder already exists." % basename, file=self.stdout)
+			raise
 		os.chdir(basename)
 		path_info = self.get_path_info(path)
 		filenames = path_info['filenames']
@@ -413,7 +415,7 @@ class FtpSession:
 			self.download_file(os.path.join(path, filename), 0)
 		for dirname in dirnames:
 			self.download_dir(os.path.join(path, dirname))
-
+		os.chdir('..')
 
 	@ftp_command
 	def get(self, args):
@@ -447,6 +449,8 @@ class FtpSession:
 					self.download_file(path, 0)
 			except response_error:
 				print("get: cannot access remote file '%s'. No such file or directory." % path, file=self.stdout)
+			except OSError:
+				pass
 
 
 	def _upload_file(self, remote_path, offset, file_data):
@@ -766,7 +770,7 @@ class FtpSession:
 		if path:
 			try:
 				os.chdir(path)
-			except FileNotFoundError:
+			except OSError:
 				print("lcd: cannot access local directory '%s'. No such directory." % path, file=self.stdout)
 
 	@ftp_command
