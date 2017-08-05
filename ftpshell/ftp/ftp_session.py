@@ -870,10 +870,13 @@ class FtpSession:
 		if path_info:
 			return path_info['isdir']
 
-	def list_dir(self, path):
+	def list_dir(self, path, dir_only=False):
 		path_info = self.get_path_info(path)
 		if path_info:
-			return path_info['dirnames'] + path_info['filenames']
+			list = ['%s/' % d for d in path_info['dirnames']]
+			if not dir_only:
+				list.extend(path_info['filenames'])
+			return sorted(list)
 
 	@ftp_command
 	def rm(self, args):

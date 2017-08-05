@@ -20,11 +20,13 @@ class FileInfoCache(object):
 		self.fs = fs
 		self.cache = dict()
 
+
 	@staticmethod
 	def get_file_mode(s):
 		m = FileInfoCache.filemode_table[s[0]]
 		m += int("".join(map(lambda x: '0' if x == '-' else '1', s[1:])), 2)
 		return m
+
 
 	@staticmethod
 	def parse_ls_line(line):
@@ -45,6 +47,7 @@ class FileInfoCache(object):
 		# filename = FileInfoCache.regex.search(line).groups()[2]
 		return " ".join(fields[8:]), file_stat
 
+
 	@staticmethod
 	def parse_ls_data(ls_data):
 		"""Parse response from the server to LIST -a command.
@@ -55,6 +58,7 @@ class FileInfoCache(object):
 			filename, file_stat = FileInfoCache.parse_ls_line(l)
 			file_stats[filename] = (file_stat, l + "\r\n")
 		return file_stats
+
 
 	def add_path_info(self, path, ls_data):
 		abs_path = self.fs.get_abs_path(path)
@@ -94,11 +98,13 @@ class FileInfoCache(object):
 					self.cache[abs_path_] = v_sub
 					v['filenames'].append(filename)
 					#print("added (%s, %s) to cache " % (abs_path_, v))
-				elif filename[0] != '.':
+				elif filename != '.' and filename != '..':
 					v['dirnames'].append(filename)
+
 
 	def get_path_info(self, path):
 		return self.cache[self.fs.get_abs_path(path)]
+
 
 	def del_path_info(self):
 		self.cache.clear()

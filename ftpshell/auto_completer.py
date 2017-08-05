@@ -21,9 +21,69 @@ class Completer(object):
 		self.path_ops_local = PathOps(Completer.listdir, os.path.isdir, os.path.exists)
 		self.path_ops_remote = None
 
+		def list_dir_local_dir_only(path):
+			return ['%s/' % i for i in os.listdir(path) if os.path.isdir(os.path.join(path, i))]
+
+		self.path_ops_dir_only_local = PathOps(list_dir_local_dir_only, os.path.isdir, os.path.exists)
+		self.path_ops_dir_only_remote = None
+
 	def set_ftp_session(self, ftp):
 		self.ftp = ftp
 		self.path_ops_remote = PathOps(ftp.list_dir, ftp.is_path_dir, ftp.path_exists)
+
+		def list_dir_remote_dir_only(path):
+			return ftp.list_dir(path, True)
+
+		self.path_ops_dir_only_remote = PathOps(list_dir_remote_dir_only, ftp.is_path_dir, ftp.path_exists)
+
+
+	def complete_local(self, args):
+		if not args:
+			return self.complete_path(self.path_ops_local, '.')
+		return self.complete_path(self.path_ops_local, args[-1])
+
+
+	def complete_remote(self, args):
+		if not args:
+			return self.complete_path(self.path_ops_remote, '.')
+		return self.complete_path(self.path_ops_remote, args[-1])
+
+
+	def complete_get(self, args):
+		return self.complete_remote(args)
+
+
+	def complete_put(self, args):
+		return self.complete_local(args)
+
+
+	def complete_mv(self, args):
+		return self.complete_remote(args)
+
+
+	def complete_rm(self, args):
+		return self.complete_remote(args)
+
+
+	def complete_ls(self, args):
+		return self.complete_remote(args)
+
+
+	def complete_mkdir(self, args):
+		return self.complete_remote(args)
+
+
+	def complete_cd(self, args):
+		if not args:
+			return self.complete_path(self.path_ops_dir_only_remote, '.')
+		return self.complete_path(self.path_ops_dir_only_remote, args[-1])
+
+
+	def complete_lcd(self, args):
+		if not args:
+			return self.complete_path(self.path_ops_dir_only_local, '.')
+		return self.complete_path(self.path_ops_dir_only_local, args[-1])
+
 
 	@staticmethod
 	def listdir(root):
@@ -35,6 +95,7 @@ class Completer(object):
 				name += os.sep
 			res.append(name)
 		return res
+
 
 	@staticmethod
 	def complete_path(path_ops, path=None):
@@ -54,19 +115,6 @@ class Completer(object):
 		# exact file match terminates this completion
 		return [path + ' ']
 
-	def complete_get(self, args):
-		"Completions for the 'extra' command."
-		if not args:
-			return self.complete_path(self.path_ops_remote, '.')
-		# treat the last arg as a path and complete it
-		return self.complete_path(self.path_ops_remote, args[-1])
-
-	def complete_put(self, args):
-		"Completions for the 'extra' command."
-		if not args:
-			return self.complete_path(self.path_ops_local, '.')
-		# treat the last arg as a path and complete it
-		return self.complete_path(self.path_ops_local, args[-1])
 
 	def complete_init(self):
 		"Generic readline completion entry point."
