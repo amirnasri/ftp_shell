@@ -870,6 +870,11 @@ class FtpSession:
 		if path_info:
 			return path_info['isdir']
 
+	def list_dir(self, path):
+		path_info = self.get_path_info(path)
+		if path_info:
+			return path_info['dirnames'] + path_info['filenames']
+
 	@ftp_command
 	def rm(self, args):
 		"""	usage: mkdir remote-file(s)

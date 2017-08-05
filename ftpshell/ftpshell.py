@@ -8,6 +8,7 @@ import readline
 import subprocess
 import traceback
 from .ftp import ftp_session
+from .auto_completer import Completer
 from .ftp.ftp_parser import parse_response_error, connection_closed_error
 from .ftp.ftp_session import FtpSession
 from .ftp.ftp_session import login_error
@@ -125,6 +126,7 @@ class FtpCli:
                     usage = 'Usage: ftpshell [username[:password]@]server[:port]'
                     server_addr, server_port, server_path, username, password, mountpoint = proc_input_args(usage)
                     self.ftp = ftp_session.FtpSession(server_addr, server_port, verbose=True)
+                    self.completer.set_ftp_session(self.ftp)
                     self.mountpoint = os.path.expanduser('~/.ftpshell21')
                     server = server_addr, server_port, server_path
                     user = username, password
@@ -172,7 +174,7 @@ class FtpCli:
             os.waitpid(self.fuse_process_pid, 0)
             print("fuse_process joined!")
 
-class Completer(object):
+'''class Completer(object):
     """ Class to provide tab-completion functionality
     to the command line.
     """
@@ -207,14 +209,18 @@ class Completer(object):
             response = self.matches[state]
         except IndexError:
             response = None
-        return response
+        return response'''
 
 def main():
     # Setup readline to provide tab completion for the command line.
-    readline.set_completer(Completer(ftp_session.FtpSession.get_ftp_commands()).complete)
+    completer = Completer(ftp_session.FtpSession.get_ftp_commands())
+    # we want to treat '/' as part of a word, so override the delimiters
+    readline.set_completer_delims(' \t\n;')
     readline.parse_and_bind('tab: complete')
+    readline.set_completer(completer.complete)
 
     cli = FtpCli()
+    cli.completer = completer
     try:
         cli.proc_cli()
     except cli_error:
