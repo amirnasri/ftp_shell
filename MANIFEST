@@ -4,6 +4,7 @@ bin/ftpmount
 bin/ftpshell
 bin/ftpumount
 ftpshell/__init__.py
+ftpshell/auto_completer.py
 ftpshell/ftpmount.py
 ftpshell/ftpshell.py
 ftpshell/ftpumount.py
