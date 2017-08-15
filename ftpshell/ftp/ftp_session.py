@@ -693,7 +693,7 @@ class FtpSession:
 		t.start()
 		self.get_resp()
 		t.join()
-		ls_data = t.ls_data
+		ls_data = t.ls_data.decode('utf-8')
 		self.data_socket.close()
 		self.verbose = save_verbose
 		return ls_data

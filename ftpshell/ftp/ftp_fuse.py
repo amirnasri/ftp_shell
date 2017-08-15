@@ -4,7 +4,7 @@ import os, stat
 from fuse import FUSE, FuseOSError, Operations
 import threading
 import errno
-import mmap
+import signal
 
 class path_not_found_error(Exception): pass
 
@@ -59,18 +59,20 @@ class FtpFuse(Operations):
 	@syncrnoize
 	def access(self, path, mode):
 		abs_path = self.abspath(path)
-		access = (self.fs.get_path_info(abs_path)['stat']['st_mode'] >> 6) & mode
-		_print("access path=%s, mode=%d, access=%s" % (abs_path, mode, access))
+		try:
+			access = (self.fs.get_path_info(abs_path)['stat']['st_mode'] >> 6) & mode
+			_print("access path=%s, mode=%d, access=%s" % (abs_path, mode, access))
+		except:
+			raise FuseOSError(errno.EACCES)
 		if not access:
 			raise FuseOSError(errno.EACCES)
-
 
 	@syncrnoize
 	def readdir(self, path, fh):
 		import sys
 		_print("readdir path=%s, fh=%d, ver=%s" % (path, fh, sys.version))
 		if path is None or path[0] != "/":
-			raise OSError
+			raise FuseOSError(errno.EACCES)
 		abs_path = self.abspath(path)
 		dirents = []
 		if self.fs.is_path_dir(abs_path):
@@ -88,17 +90,32 @@ class FtpFuse(Operations):
 			return FuseOSError(errno.EACCES)
 		abs_path = self.abspath(path)
 		_print("=============getattr abs path=%s" % abs_path)
-		path_info = self.fs.get_path_info(abs_path)
+		try:
+			path_info = self.fs.get_path_info(abs_path)
+		except IOError:
+			os.kill(os.getpid(), signal.SIGINT)
+			raise FuseOSError(errno.EACCES)
+		except:
+			raise FuseOSError(errno.EACCES)
+
 		if path_info is None:
 			raise FuseOSError(errno.EACCES)
 
 	@syncrnoize
 	def getattr(self, path, fh=None):
 		if path is None or path[0] != "/":
-			raise OSError
+			raise FuseOSError(errno.EACCES)
+
 		abs_path = self.abspath(path)
-		path_info = self.fs.get_path_info(abs_path)
+		try:
+			path_info = self.fs.get_path_info(abs_path)
+		except IOError:
+			os.kill(os.getpid(), signal.SIGINT)
+			raise FuseOSError(errno.ENOENT)
+		except:
+			raise FuseOSError(errno.ENOENT)
 		_print("=============getattr1 path=%s, path_info=%s" % (path, path_info))
+
 		if path_info is None:
 			raise FuseOSError(errno.ENOENT)
 		return path_info['stat']
@@ -109,10 +126,14 @@ class FtpFuse(Operations):
 	@syncrnoize
 	def create(self, path, mode, fi=None):
 		if path is None or path[0] != "/":
-			raise OSError
+			raise FuseOSError(errno.EACCES)
 		abs_path = self.abspath(path)
 		_print("=============create abs_path=%s, fh=" % abs_path)
-		self.fs._upload_file(abs_path, 0, b"")
+		try:
+			self.fs._upload_file(abs_path, 0, b"")
+		except:
+			raise FuseOSError(errno.EACCES)
+
 		if self.curr_file:
 			self.curr_file.close()
 			self.curr_file = None
@@ -121,11 +142,15 @@ class FtpFuse(Operations):
 	@syncrnoize
 	def open(self, path, flags):
 		if path is None or path[0] != "/":
-			raise OSError
+			raise FuseOSError(errno.EACCES)
 		abs_path = self.abspath(path)
 		_print("=============open abs_path=%s, fh=" % abs_path)
 		if flags & os.O_CREAT:
-			self.fs._upload_file(abs_path, 0, b"")
+			try:
+				self.fs._upload_file(abs_path, 0, b"")
+			except:
+				raise FuseOSError(errno.EACCES)
+
 		if self.curr_file:
 			self.curr_file.close()
 			self.curr_file = None
@@ -134,7 +159,7 @@ class FtpFuse(Operations):
 	@syncrnoize
 	def read(self, path, length, offset, fh):
 		if path is None or path[0] != "/":
-			raise OSError
+			raise FuseOSError(errno.ENOENT)
 		abs_path = self.abspath(path)
 		_print("=============read abs_path=%s, fh=" % abs_path)
 		if not self.curr_file:
@@ -144,7 +169,10 @@ class FtpFuse(Operations):
 			#_print("filesize=%d" % file_size)
 			#mm_file = mmap.mmap(-1, file_size)
 			#mm_file.seek(0)
-			self.curr_file = self.fs.download_file(abs_path, 0, True)
+			try:
+				self.curr_file = self.fs.download_file(abs_path, 0, True)
+			except:
+				raise FuseOSError(errno.ENOENT)
 
 		self.curr_file.seek(offset)
 		return self.curr_file.read(length)
@@ -152,28 +180,43 @@ class FtpFuse(Operations):
 	@syncrnoize
 	def write(self, path, buf, offset, fh):
 		if path is None or path[0] != "/":
-			raise OSError
+			raise FuseOSError(errno.ENOENT)
 		abs_path = self.abspath(path)
 		_print("=============write abs_path=%s, fh=" % abs_path)
-		self.fs._upload_file(abs_path, offset, buf)
+		try:
+			self.fs._upload_file(abs_path, offset, buf)
+		except:
+			raise FuseOSError(errno.EACCES)
 		return len(buf)
 
 	def unlink(self, path):
 		abs_path = self.abspath(path)
-		self.fs.rmfile(abs_path)
+		try:
+			self.fs.rmfile(abs_path)
+		except:
+			raise FuseOSError(errno.ENOENT)
 
 	def mkdir(self, path, mode):
 		abs_path = self.abspath(path)
-		self.fs.mkdir([abs_path])
+		try:
+			self.fs.mkdir([abs_path])
+		except:
+			raise FuseOSError(errno.ENOENT)
 
 	def rmdir(self, path):
 		abs_path = self.abspath(path)
-		self.fs.rmdir(abs_path)
+		try:
+			self.fs.rmdir(abs_path)
+		except:
+			raise FuseOSError(errno.ENOENT)
 
 	def rename(self, old, new):
 		abs_old_path = self.abspath(old)
 		abs_new_path = self.abspath(new)
-		self.fs.mv([abs_old_path, abs_new_path])
+		try:
+			self.fs.mv([abs_old_path, abs_new_path])
+		except:
+			raise FuseOSError(errno.ENOENT)
 
 	def truncate(self, path, length, fh=None):
 		pass
