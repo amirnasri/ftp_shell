@@ -55,8 +55,9 @@ def ftp_mount(server, user, mountpoint, base_dir=None, use_thread=False):
 	if not use_thread:
 		#sys.stdout = sys.stderr = open(os.devnull, "w")
 		print("fuse before")
+		ftp = None
+		mp_created = False
 		try:
-			mp_created = False
 			if not os.path.exists(mountpoint):
 				os.mkdir(mountpoint)
 				mp_created = True
@@ -64,7 +65,6 @@ def ftp_mount(server, user, mountpoint, base_dir=None, use_thread=False):
 			server_addr, server_port, server_path = server
 			username, password = user
 
-			ftp = None
 			ftp = ftp_session.FtpSession(server_addr, server_port, verbose=True)
 			try:
 				ftp.login(username, password, server_path)
@@ -80,8 +80,8 @@ def ftp_mount(server, user, mountpoint, base_dir=None, use_thread=False):
 				print("runtoirj*************")
 				subprocess.call(["fusermount", "-u", mountpoint], shell=False)
 				FUSE(FtpFuse(ftp), mountpoint, nothreads=True, foreground=True)
-		#except:
-		#	pass
+		except:
+			raise
 		finally:
 			if mp_created:
 				os.rmdir(mountpoint)
@@ -97,6 +97,12 @@ def ftp_mount(server, user, mountpoint, base_dir=None, use_thread=False):
 		#print("started fuse process, pid=%d" % fuse_process.pid)
 		# self.fuse_process = fuse_process
 		#return fuse_process
+
+		# FUSE does not create a child process. So the process that calls
+		# FUSE will not exit until the FUSE operation in finished (normally a kill -x
+		# signal sent to process running FUSE). To be albe to run FUSE in the background,
+		# fork the process and run FUSE int he child process. The parent process returns with
+		# the child pid and exits immediately.
 		pid = os.fork()
 		if not pid:
 			ftp_mount(server, user, mountpoint, use_thread=False)

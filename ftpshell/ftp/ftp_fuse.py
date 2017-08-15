@@ -138,14 +138,14 @@ class FtpFuse(Operations):
 		abs_path = self.abspath(path)
 		_print("=============read abs_path=%s, fh=" % abs_path)
 		if not self.curr_file:
-			file_size = self.fs.size([abs_path])
-			if file_size == 0:
-				return b""
-			_print("filesize=%d" % file_size)
-			mm_file = mmap.mmap(-1, file_size)
+			#file_size = self.fs.size([abs_path])
+			#if file_size == 0:
+			#	return b""
+			#_print("filesize=%d" % file_size)
+			#mm_file = mmap.mmap(-1, file_size)
 			#mm_file.seek(0)
-			self.curr_file = mm_file
-			self.fs.download_file(abs_path, 0, self.curr_file)
+			self.curr_file = self.fs.download_file(abs_path, 0, True)
+
 		self.curr_file.seek(offset)
 		return self.curr_file.read(length)
 

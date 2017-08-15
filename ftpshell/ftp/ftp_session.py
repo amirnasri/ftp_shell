@@ -262,16 +262,17 @@ class FtpSession:
 				data_socket = None
 		return data_socket
 
-	MIN_MMAP_SIZE = 1 << 20
-	def get_mmap_download(self, transfer_type, path):
+	MIN_MMAP_SIZE = 1 << 1
+	def get_mmap_download(self, transfer_type, path, anonymous):
 		# If transfer type is binary and file size is "large"
 		# use mmap to make transfer more efficient
-		filename = os.path.basename(path)
+
 		mm_file = None
+		filename = os.path.basename(path)
+		file_size = self.size([path])
 		if transfer_type == 'I':
-			file_size = self.size([path])
 			if file_size > FtpSession.MIN_MMAP_SIZE:
-				if filename:
+				if not anonymous:
 					f = file(filename, "w+b")
 					f.seek(file_size - 1)
 					f.write('\0')
@@ -280,15 +281,16 @@ class FtpSession:
 					mm_file = mmap.mmap(f.fileno(), file_size)
 					print(mm_file)
 					f.close()
-				else:
-					mm_file = mmap.mmap(-1, file_size)
-		mm_file = None
+		elif anonymous:
+			print("*********%s" % file_size)
+			mm_file = mmap.mmap(-1, file_size)
+			print("*********%s" % mm_file)
 		if not mm_file:
 			mm_file = open(filename, "w+b")
 		return mm_file
 
 
-	def download_file(self, path, offset):
+	def download_file(self, path, offset, anonymous=False):
 		"""Download a single file located at `path` on the server.
 
 		Args:
@@ -317,7 +319,7 @@ class FtpSession:
 			print("TYPE command failed.", file=self.stdout)
 			raise
 
-		mm_file = self.get_mmap_download(transfer_type, path)
+		mm_file = self.get_mmap_download(transfer_type, path, anonymous)
 
 		print("offset=%s" % offset)
 		if offset != 0:
@@ -344,13 +346,13 @@ class FtpSession:
 			mm_file.write(file_data)
 			tsize += len(file_data)
 			#print("tsize = %d, mm_tell=%d" % (tsize, mm_file.tell()))
-		mm_file.close()
 		if self.verbose:
 			elapsed_time = time.time() - curr_time
 			print("%d bytes received in %.2f seconds (%.2f b/s)."
 			      % (tsize, elapsed_time, FtpSession.calculate_data_rate(tsize, elapsed_time)))
 		self.get_resp()
 		self.data_socket.close()
+		return mm_file
 
 		"""
 		f = open(filename, "wb")
@@ -412,7 +414,8 @@ class FtpSession:
 		filenames = path_info['filenames']
 		dirnames = path_info['dirnames']
 		for filename in filenames:
-			self.download_file(os.path.join(path, filename), 0)
+			mm_file = self.download_file(os.path.join(path, filename), 0)
+			mm_file.close()
 		for dirname in dirnames:
 			self.download_dir(os.path.join(path, dirname))
 		os.chdir('..')
@@ -446,7 +449,8 @@ class FtpSession:
 				if isdir:
 					self.download_dir(path)
 				else:
-					self.download_file(path, 0)
+					mm_file = self.download_file(path, 0)
+					mm_file.close()
 			except response_error:
 				print("get: cannot access remote file '%s'. No such file or directory." % path, file=self.stdout)
 			except OSError:
