@@ -15,6 +15,7 @@ import types
 import getpass
 import threading
 import mmap
+from . import _sendfile
 from multiprocessing import Manager, Process
 
 # from fuse import FUSE
@@ -58,7 +59,7 @@ class FtpSession:
 	    >>> fs.login("username", "passwd")
 	    >>> fs.get(["f1", "f2"])
 	"""
-	READ_BLOCK_SIZE = 1 << 20
+	READ_BLOCK_SIZE = 1 << 19
 
 	def __init__(self, server, port=21, verbose=False):
 		"""
@@ -520,7 +521,7 @@ class FtpSession:
 			print(e)
 			return
 		curr_time = time.time()
-		offset = 0
+		'''offset = 0
 		while True:
 			file_data = f.read(FtpSession.READ_BLOCK_SIZE)
 			if file_data == b'':
@@ -530,6 +531,57 @@ class FtpSession:
 			#	file_data = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
 			# self.data_socket.send(file_data)
 			offset += len(file_data)
+		'''
+
+
+
+		# If transfer type is not set, send TYPE command depending on the type of the file
+		# (TYPE A for ascii files and TYPE I for binary files)
+		transfer_type = self.transfer_type
+		file_ext = self.get_file_ext(remote_path)
+		if transfer_type is None:
+			if file_ext != '' and file_ext in self.text_file_extensions:
+				transfer_type = 'A'
+			else:
+				transfer_type = 'I'
+		self.send_raw_command("TYPE %s\r\n" % transfer_type)
+		try:
+			self.get_resp()
+		except response_error:
+			print("TYPE command failed.", file=self.stdout)
+			raise
+
+		self.data_socket = self.setup_data_transfer("STOR %s\r\n" % remote_path)
+
+		offset = 0
+		if self.transfer_type == 'A':
+			while True:
+				file_data = f.read(FtpSession.READ_BLOCK_SIZE)
+				if file_data == b'':
+					break
+				file_data = bytes(file_data.decode('ascii').replace('\r\n', '\n'), 'ascii')
+				self.data_socket.send(file_data)
+		else:
+			'''
+			while True:
+				sent = sendfile.sendfile(self.data_socket.fileno(), f.fileno(), offset, FtpSession.READ_BLOCK_SIZE)
+				if sent == 0:
+					break
+				offset += sent
+			'''
+			#offset = _sendfile.sendfile(self.data_socket, f, 0)
+			READ_BLOCK_SIZE = 1 << 19
+			print(READ_BLOCK_SIZE)
+			while True:
+				file_data = f.read(READ_BLOCK_SIZE)
+				if file_data == b'':
+					break
+				self.data_socket.send(file_data)
+				offset += len(file_data)
+
+		self.data_socket.close()
+		self.get_resp()
+
 		elapsed_time = time.time() - curr_time
 		f.close()
 		if self.verbose:
