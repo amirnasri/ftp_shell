@@ -262,7 +262,7 @@ class FtpSession:
 				data_socket = None
 		return data_socket
 
-	MIN_MMAP_SIZE = 1 << 1
+	MIN_MMAP_SIZE = 1 << 40
 	def get_mmap_download(self, transfer_type, path, anonymous):
 		# If transfer type is binary and file size is "large"
 		# use mmap to make transfer more efficient
@@ -345,7 +345,7 @@ class FtpSession:
 			# file_data += file_data_
 			mm_file.write(file_data)
 			tsize += len(file_data)
-			#print("tsize = %d, mm_tell=%d" % (tsize, mm_file.tell()))
+
 		if self.verbose:
 			elapsed_time = time.time() - curr_time
 			print("%d bytes received in %.2f seconds (%.2f b/s)."
