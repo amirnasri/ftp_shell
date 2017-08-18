@@ -569,8 +569,9 @@ class FtpSession:
 					break
 				offset += sent
 			'''
-			#offset = _sendfile.sendfile(self.data_socket, f, 0)
-			READ_BLOCK_SIZE = 1 << 19
+			offset = _sendfile.sendfile(self.data_socket, f, 0)
+
+			'''READ_BLOCK_SIZE = 1 << 19
 			print(READ_BLOCK_SIZE)
 			while True:
 				file_data = f.read(READ_BLOCK_SIZE)
@@ -578,7 +579,7 @@ class FtpSession:
 					break
 				self.data_socket.send(file_data)
 				offset += len(file_data)
-
+			'''
 		self.data_socket.close()
 		self.get_resp()
 
