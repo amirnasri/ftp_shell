@@ -6,3 +6,4 @@ include:
 * Command auto-complete. For file download auto-complete works based on remote file system while for upload
 it works based on local file system.
 * Improved download and upload file transfer speed using `mmap` and `sendfile`.
+* Color-coded directory listing output. 
