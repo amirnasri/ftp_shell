@@ -17,7 +17,5 @@ ftpshell can be install using the following command:
 `pip install ftpshell`
 
 The following prerequisites should be install before installing ftpshell:
-
-`pysendfile`: pip install pysendfile
-
-`pyfuse`: pip install pyfuse
+*`pysendfile`: pip install pysendfile
+*`pyfuse`: pip install pyfuse
