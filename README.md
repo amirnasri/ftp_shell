@@ -20,5 +20,5 @@ pip install ftpshell
 ```
 
 The following prerequisites should be install before installing ftpshell:
-* `pysendfile`: pip install pysendfile
-* `pyfuse`: pip install pyfuse
+* pysendfile: `pip install pysendfile`
+* fusepy: `pip install fusepy`
