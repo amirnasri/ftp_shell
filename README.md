@@ -15,9 +15,9 @@ it works based on local file system.
 # Installation
 ftpshell can be install using the following command:
 
-.. code-block:: bash
+```bash
 pip install ftpshell
-
+```
 
 The following prerequisites should be install before installing ftpshell:
 * `pysendfile`: pip install pysendfile
