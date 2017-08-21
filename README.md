@@ -6,8 +6,8 @@ include:
 * Support for common Bash commands such as `ls`, `rm`, `mv`, `mkdir`, and `rmdir`.
 * Ability to run local binaries like `cat`, `find`, `grep`, etc on the remote FTP server.
 * Recursive directory upload and download.
-* Command auto-complete for file download based on remote file system and for file upload based on local file system.
-* Improved download and upload file transfer speed using `mmap` and `sendfile` system calls.
+* Command auto-complete based on remote file system for download and local file system for upload.
+* Improved file download and upload transfer speed using `mmap` and `sendfile` system calls.
 * Color-coded directory listing output. 
 
 `ftpmount` allows the user to mount an FTP server on a local folder. Once mounted, all command and binaries available on the local machine can be run on the server as if it was a local folder.
