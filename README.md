@@ -23,6 +23,6 @@ The following prerequisites should be install before installing ftpshell:
 * pysendfile: `pip install pysendfile`
 * fusepy: `pip install fusepy`
 
-# ftpshell Usage
+# ftpshell usage
 
 ![Alt text](/screenshot_ftpshell1.png "ftpshell screenshot")
