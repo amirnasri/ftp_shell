@@ -129,66 +129,67 @@ class FtpCli:
         using the user credentials. Then read the input commands from
         the command-line and send them to the ftp session for processing.
         """
-        while True:
-            try:
-                if self.first_attempt:
-                    self.first_attempt = False
-                    server_addr, server_port, server_path, username, password, mountpoint = proc_input_args()
-                    self.ftp = ftp_session.FtpSession(server_addr,
-                                                      server_port,
-                                                      verbose=self.args.verbose,
-                                                      transfer_type=self.args.transfer_type,
-                                                      transfer_mode=self.args.transfer_mode)
-                    self.completer.set_ftp_session(self.ftp)
-                    self.mountpoint = os.path.expanduser('/tmp/.ftpshell_mp')
-                    server = server_addr, server_port, server_path
-                    user = username, password
-                    self.fuse_process_pid = ftp_mount(server, user, self.mountpoint, use_thread=True)
-                    self.ftp.login(username, password, server_path)
-                else:
-                        cmd_line = raw_input(self.get_prompt())
-                        if not cmd_line.strip():
-                            continue
+        try:
+            while True:
+                try:
+                    if self.first_attempt:
+                        self.first_attempt = False
+                        server_addr, server_port, server_path, username, password, mountpoint = proc_input_args()
+                        self.ftp = ftp_session.FtpSession(server_addr,
+                                                          server_port,
+                                                          verbose=self.args.verbose,
+                                                          transfer_type=self.args.transfer_type,
+                                                          transfer_mode=self.args.transfer_mode)
+                        self.completer.set_ftp_session(self.ftp)
+                        self.mountpoint = os.path.expanduser('~/.ftpshell/mp')
+                        server = server_addr, server_port, server_path
+                        user = username, password
+                        self.fuse_process_pid = ftp_mount(server, user, self.mountpoint, use_thread=True)
+                        self.ftp.login(username, password, server_path)
+                    else:
+                            cmd_line = raw_input(self.get_prompt())
+                            if not cmd_line.strip():
+                                continue
 
-                        try:
-                            # Delegate processing of input command to the
-                            # ftp session.
-                            self.run_command(cmd_line)
-                        except ftp_session.response_error:
-                            pass
+                            try:
+                                # Delegate processing of input command to the
+                                # ftp session.
+                                self.run_command(cmd_line)
+                            except ftp_session.response_error:
+                                pass
 
-            except login_error:
-                print("Login failed.")
-            except ftp_session.cmd_not_implemented_error:
-                print("Command not recognized. Please use 'help' to see a list of available commands.")
-            except (socket.error, parse_response_error, connection_closed_error, ftp_session.network_error):
-                self.ftp.close_server()
-                print("Connection was closed by the server.")
-            except KeyboardInterrupt:
-                break
-            except EOFError:
-                print()
-                break
-            except ftp_session.quit_error:
-                print("Goodbye.")
-                break
-            '''
-            except:
-                print("An unexpected error happened.", end='')
-                if self.args.logfile:
-                    logging.error(traceback.print_exc())
-                    print("Please see log file %s for more information.\n" % self.args.logfile)
-                else:
-                    print(end="\n")
+                except KeyboardInterrupt:
+                    break
+                except EOFError:
+                    print()
+                    break
+                except ftp_session.quit_error:
+                    print("Goodbye.")
+                    break
 
-                print("\nClosing ftp session.")
-                break
-            '''
-        if self.ftp:
-            self.ftp.close()
-        if self.fuse_process_pid:
-            os.kill(self.fuse_process_pid, signal.SIGINT)
-            os.waitpid(self.fuse_process_pid, 0)
+        except login_error:
+            print("Login failed.")
+        except ftp_session.cmd_not_implemented_error:
+            print("Command not recognized. Please use 'help' to see a list of available commands.")
+        except (socket.error, parse_response_error, connection_closed_error, ftp_session.network_error):
+            self.ftp.close_server()
+            print("Connection was closed by the server.")
+        except:
+            print("An unexpected error happened.", end='')
+            if self.args.logfile:
+                logging.error(traceback.print_exc())
+                print("Please see log file %s for more information.\n" % self.args.logfile)
+            else:
+                print(end="\n")
+
+            print("\nClosing ftp session.")
+            raise
+        finally:
+            if hasattr(self, 'ftp') and self.ftp:
+                self.ftp.close()
+            if hasattr(self, 'fuse_process_pid') and self.fuse_process_pid:
+                os.kill(self.fuse_process_pid, signal.SIGINT)
+                os.waitpid(self.fuse_process_pid, 0)
 
 '''
 usage = ('%sUsage:%s ftpshell [username[:password]@]server[:port] \n' %(LsColors.BOLD, LsColors.ENDC)

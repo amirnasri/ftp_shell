@@ -9,6 +9,7 @@ ftpshell/ftpmount.py
 ftpshell/ftpshell.py
 ftpshell/ftpumount.py
 ftpshell/ftp/__init__.py
+ftpshell/ftp/_sendfile.py
 ftpshell/ftp/file_info_cache.py
 ftpshell/ftp/ftp_fuse.py
 ftpshell/ftp/ftp_parser.py
