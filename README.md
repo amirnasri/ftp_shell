@@ -24,4 +24,5 @@ The following prerequisites should be install before installing ftpshell:
 * fusepy: `pip install fusepy`
 
 # Usage
-![Alt text](/screenshot_ftpshell2.png "Optional Title")
+* ftpshell
+![Alt text](/screenshot_ftpshell1.png "ftpshell screenshot")
