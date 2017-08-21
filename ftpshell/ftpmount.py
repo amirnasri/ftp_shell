@@ -1,23 +1,21 @@
 from __future__ import print_function
-from multiprocessing import Process
+import argparse
+from fuse import FUSE
+import logging
 import os
-import subprocess
 import socket
+import subprocess
 import sys
 import threading
-from fuse import FUSE
 from .ftp import ftp_session
 from .ftp.ftp_parser import parse_response_error
 from .ftp.ftp_session import login_error
 from .ftp.ftp_fuse import FtpFuse
-#from .ftpshell import proc_input_args
-#from .ftpshell import cli_error
 
 """
 def run_fuse(ftp, mountpoint):
 	# sys.stdout = sys.stderr = open(os.devnull, "w")
 	print("fuse before")
-	print("-------------%s" % ftp.shared_dict)
 	try:
 		mp_created = False
 		if not os.path.exists(mountpoint):
@@ -28,7 +26,6 @@ def run_fuse(ftp, mountpoint):
 
 		FUSE(FtpFuse(ftp), mountpoint, nothreads=True, foreground=True)
 	except RuntimeError:
-		print("runtoirj*************")
 		subprocess.call(["fusermount", "-u", mountpoint], shell=False)
 		FUSE(FtpFuse(ftp), mountpoint, nothreads=True, foreground=True)
 	finally:
@@ -53,8 +50,6 @@ def ftp_mount(server, user, mountpoint, base_dir=None, use_thread=False):
 	"""
 
 	if not use_thread:
-		#sys.stdout = sys.stderr = open(os.devnull, "w")
-		print("fuse before")
 		ftp = None
 		mp_created = False
 		try:
@@ -65,21 +60,22 @@ def ftp_mount(server, user, mountpoint, base_dir=None, use_thread=False):
 			server_addr, server_port, server_path = server
 			username, password = user
 
-			ftp = ftp_session.FtpSession(server_addr, server_port, verbose=True)
+			ftp = ftp_session.FtpSession(server_addr, server_port, verbose=False)
 			try:
 				ftp.login(username, password, server_path)
 			except login_error:
-				print("Login failed.")
+				logging.error("Login failed.")
 			except (socket.error, parse_response_error, ftp_session.network_error):
 				ftp.close_server()
-				print("Connection was closed by the server.")
+				logging.error("Connection was closed by the server.")
 
+			sys.stdout = sys.stderr = open(os.devnull, "w")
 			try:
 				FUSE(FtpFuse(ftp), mountpoint, nothreads=True, foreground=True)
 			except RuntimeError:
-				print("runtoirj*************")
+				logging.error('Failed to run fuse process.')
 				subprocess.call(["fusermount", "-u", mountpoint], shell=False)
-				FUSE(FtpFuse(ftp), mountpoint, nothreads=True, foreground=True)
+				#FUSE(FtpFuse(ftp), mountpoint, nothreads=True, foreground=True)
 		except:
 			raise
 		finally:
@@ -88,15 +84,16 @@ def ftp_mount(server, user, mountpoint, base_dir=None, use_thread=False):
 			if ftp:
 				ftp.close()
 	else:
-		#t = FtpMountThread(server, user, mountpoint)
-		#t.start()
-		#t.join()
-		#return t
-		#fuse_process = Process(target=ftp_mount, args=(server, user, mountpoint, None, False))
-		#fuse_process.start()
-		#print("started fuse process, pid=%d" % fuse_process.pid)
-		# self.fuse_process = fuse_process
-		#return fuse_process
+		'''t = FtpMountThread(server, user, mountpoint)
+		t.start()
+		t.join()
+		return t
+		fuse_process = Process(target=ftp_mount, args=(server, user, mountpoint, None, False))
+		fuse_process.start()
+		print("started fuse process, pid=%d" % fuse_process.pid)
+		self.fuse_process = fuse_process
+		return fuse_process
+		'''
 
 		# FUSE does not create a child process. So the process that calls
 		# FUSE will not exit until the FUSE operation in finished (normally a kill -x
@@ -139,12 +136,40 @@ def ftp_connect_mount(server, user, mountpoint):
 	ftp_mount(ftp, mountpoint)
 """
 
+def arg_parse(*args, **kwargs):
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '{{u{:p}}@}server{:port}',
+        help='Server and user information. '
+             '{u}: user, {p}:password, {server}: remote server, {port}: server port. example: anonymous@ftp.example.com/upload/')
+    parser.add_argument(
+        'mountpoint',
+        help='Local directory where FTP server is to be mounted.')
+    parser.add_argument(
+        '-l', '--logfile', default='~/.ftpshell/log',
+        help='File to use for logging (default: %(default)s).')
+
+    return parser.parse_args(*args, **kwargs)
+
 
 def main():
 	from . import ftpshell
+	args = arg_parse()
+	if args.logfile == '~/.ftpshell/log':
+		if not os.path.isdir(os.path.expanduser('~/.ftpshell/')):
+			try:
+				os.mkdir(os.path.expanduser('~/.ftpshell/'))
+			except OSError:
+				args.logfile = ''
+	if args.logfile:
+		try:
+			logging.basicConfig(filename=args.logfile, level=logging.DEBUG)
+		except IOError:
+			args.logfile = ''
+
 	try:
-		usage = 'Usage: ftpshell [username[:password]@]server[:port] mountpoint'
-		server_addr, server_port, server_path, username, password, mountpoint = ftpshell.proc_input_args(usage)
+		#usage = 'Usage: ftpshell [username[:password]@]server[:port] mountpoint'
+		server_addr, server_port, server_path, username, password, mountpoint = ftpshell.proc_input_args()
 		server = server_addr, server_port, server_path
 		user = username, password
 		fuse_process_pid = ftp_mount(server, user, mountpoint, use_thread=True)

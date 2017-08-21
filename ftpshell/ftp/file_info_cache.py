@@ -3,15 +3,16 @@
 # path of the resource on the server and v is dictionary with the following items:
 # v['ls_data']: raw ls data fetched from the server
 # v['stat']: dictionary containing stats information for the file (format is
-#   the same as that returned by os.stat
+#   the same as returned by os.stat)
 # v['isdir']: True if the path is a directory otherwise False
 
 from __future__ import print_function
 import os
-import sys
+import re
 #TODO: find out import problem
 import dateutil.parser
 
+search_space_regex = re.compile(r'\s')
 class FileInfoCache(object):
 	filemode_table = {k: v for v, k in [(40960, 'l'), (32768, '-'), (24576, 'b'),
 											(16384, 'd'), (8192, 'c'), (4096, 'p')]}
@@ -45,7 +46,13 @@ class FileInfoCache(object):
 		file_stat["st_size"] = int(fields[4])
 		# regex = re.compile(r'^((\S+\s+){8})(.*)')
 		# filename = FileInfoCache.regex.search(line).groups()[2]
-		return " ".join(fields[8:]), file_stat
+		filename = " ".join(fields[8:])
+		slink = None
+		if fields[0][0] == 'l':
+			filename_split = filename.split(' -> ')
+			filename = filename_split[0]
+			slink = filename_split[1]
+		return filename, file_stat, slink
 
 
 	@staticmethod
@@ -55,8 +62,8 @@ class FileInfoCache(object):
 		ls_lines = [l for l in ls_data.split("\r\n") if len(l) > 0]
 		file_stats = dict()
 		for l in ls_lines:
-			filename, file_stat = FileInfoCache.parse_ls_line(l)
-			file_stats[filename] = (file_stat, l + "\r\n")
+			filename, file_stat, slink = FileInfoCache.parse_ls_line(l)
+			file_stats[filename] = (file_stat, l + "\r\n", slink)
 		return file_stats
 
 
@@ -76,6 +83,7 @@ class FileInfoCache(object):
 			v['isdir'] = True
 		else:
 			v['stat'] = list(file_stats.values())[0][0]
+			v['slink'] = list(file_stats.values())[0][2]
 			v['isdir'] = False
 		self.cache[abs_path] = v
 		#print("added (%s, %s) to cache " % (abs_path, v))
@@ -86,7 +94,8 @@ class FileInfoCache(object):
 		if isdir:
 			v['dirnames'] = []
 			v['filenames'] = []
-			for filename, (stat, l) in file_stats.items():
+			for filename, (stat, l, slink) in file_stats.items():
+				abs_path_ = os.path.join(abs_path, filename)
 				# Don't cache directories since we don't have
 				# ls_data for them.
 				if not l.startswith('d'):
@@ -94,17 +103,26 @@ class FileInfoCache(object):
 					v_sub['stat'] = stat
 					v_sub['isdir'] = False
 					v_sub['ls_data'] = l
-					abs_path_ = os.path.join(abs_path, filename)
+					v_sub['slink'] = slink
 					self.cache[abs_path_] = v_sub
 					v['filenames'].append(filename)
 					#print("added (%s, %s) to cache " % (abs_path_, v))
 				elif filename != '.' and filename != '..':
 					v['dirnames'].append(filename)
-
+					# For directory names containing spaces, we cannot use LIST command
+					# to get directory information from the server. So, the best we can
+					# do is to show the directory entry and ignore its contents.
+					if search_space_regex.search(filename):
+						v_sub = dict()
+						v_sub['stat'] = stat
+						v_sub['isdir'] = True
+						v_sub['ls_data'] = l
+						self.cache[abs_path_] = v_sub
+			v['dirnames'].sort()
+			v['filenames'].sort()
 
 	def get_path_info(self, path):
 		return self.cache[self.fs.get_abs_path(path)]
-
 
 	def del_path_info(self):
 		self.cache.clear()

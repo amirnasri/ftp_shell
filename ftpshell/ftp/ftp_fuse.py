@@ -5,19 +5,20 @@ from fuse import FUSE, FuseOSError, Operations
 import threading
 import errno
 import signal
+from .ftp_session import connection_closed_error
 
 class path_not_found_error(Exception): pass
 
 threadLock = threading.Lock()
 
 def _print(*args, **kwargs):
+	#print(*args, **kwargs)
 	pass
 
 def syncrnoize(f):
 	def new_f(*args, **kwargs):
 		#_print("#########acquireing lock " + " called by " + inspect.stack()[1][3])
 		#threadLock.acquire()
-		#try:
 		ret = f(*args, **kwargs)
 
 		'''
@@ -62,6 +63,9 @@ class FtpFuse(Operations):
 		try:
 			access = (self.fs.get_path_info(abs_path)['stat']['st_mode'] >> 6) & mode
 			_print("access path=%s, mode=%d, access=%s" % (abs_path, mode, access))
+		except connection_closed_error:
+			os.kill(os.getpid(), signal.SIGINT)
+			return
 		except:
 			raise FuseOSError(errno.EACCES)
 		if not access:
@@ -74,14 +78,18 @@ class FtpFuse(Operations):
 		if path is None or path[0] != "/":
 			raise FuseOSError(errno.EACCES)
 		abs_path = self.abspath(path)
-		dirents = []
-		if self.fs.is_path_dir(abs_path):
+		try:
 			path_info = self.fs.get_path_info(abs_path)
-			dirents.extend([l.split()[-1] for l in path_info['ls_data'].split('\r\n') if len(l) != 0])
-		#_print("readdir: dirents=%s " % str(dirents))
-		for dirent in dirents:
+		except connection_closed_error:
+			os.kill(os.getpid(), signal.SIGINT)
+			return
+		except:
+			raise FuseOSError(errno.EACCES)
+
+		for dirent in path_info['filenames']:
 			yield dirent
-		#return dirents
+		for dirent in path_info['dirnames']:
+			yield dirent
 
 	@syncrnoize
 	def access(self, path, mode):
@@ -92,9 +100,9 @@ class FtpFuse(Operations):
 		_print("=============getattr abs path=%s" % abs_path)
 		try:
 			path_info = self.fs.get_path_info(abs_path)
-		except IOError:
+		except connection_closed_error:
 			os.kill(os.getpid(), signal.SIGINT)
-			raise FuseOSError(errno.EACCES)
+			return
 		except:
 			raise FuseOSError(errno.EACCES)
 
@@ -109,9 +117,9 @@ class FtpFuse(Operations):
 		abs_path = self.abspath(path)
 		try:
 			path_info = self.fs.get_path_info(abs_path)
-		except IOError:
+		except connection_closed_error:
 			os.kill(os.getpid(), signal.SIGINT)
-			raise FuseOSError(errno.ENOENT)
+			return
 		except:
 			raise FuseOSError(errno.ENOENT)
 		_print("=============getattr1 path=%s, path_info=%s" % (path, path_info))
@@ -178,6 +186,24 @@ class FtpFuse(Operations):
 		return self.curr_file.read(length)
 
 	@syncrnoize
+	def readlink(self, path):
+		if path is None or path[0] != "/":
+			raise FuseOSError(errno.ENOENT)
+		abs_path = self.abspath(path)
+
+		try:
+			path_info = self.fs.get_path_info(abs_path)
+		except IOError:
+			os.kill(os.getpid(), signal.SIGINT)
+			raise FuseOSError(errno.EACCES)
+		except:
+			raise FuseOSError(errno.EACCES)
+
+		if path_info is None:
+			raise FuseOSError(errno.EACCES)
+		return path_info['slink']
+
+	@syncrnoize
 	def write(self, path, buf, offset, fh):
 		if path is None or path[0] != "/":
 			raise FuseOSError(errno.ENOENT)
@@ -189,6 +215,7 @@ class FtpFuse(Operations):
 			raise FuseOSError(errno.EACCES)
 		return len(buf)
 
+	@syncrnoize
 	def unlink(self, path):
 		abs_path = self.abspath(path)
 		try:
@@ -196,6 +223,7 @@ class FtpFuse(Operations):
 		except:
 			raise FuseOSError(errno.ENOENT)
 
+	@syncrnoize
 	def mkdir(self, path, mode):
 		abs_path = self.abspath(path)
 		try:
@@ -203,6 +231,7 @@ class FtpFuse(Operations):
 		except:
 			raise FuseOSError(errno.ENOENT)
 
+	@syncrnoize
 	def rmdir(self, path):
 		abs_path = self.abspath(path)
 		try:
@@ -210,6 +239,7 @@ class FtpFuse(Operations):
 		except:
 			raise FuseOSError(errno.ENOENT)
 
+	@syncrnoize
 	def rename(self, old, new):
 		abs_old_path = self.abspath(old)
 		abs_new_path = self.abspath(new)
@@ -218,9 +248,11 @@ class FtpFuse(Operations):
 		except:
 			raise FuseOSError(errno.ENOENT)
 
+	@syncrnoize
 	def truncate(self, path, length, fh=None):
 		pass
 
+	@syncrnoize
 	def flush(self, path, fh):
 		pass
 

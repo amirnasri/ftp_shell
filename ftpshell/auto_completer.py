@@ -1,9 +1,7 @@
+import logging
 import os
 import re
 import readline
-import sys
-import traceback
-import logging
 
 RE_SPACE = re.compile('.*\s+$', re.M)
 
@@ -123,7 +121,6 @@ class Completer(object):
 		# show all commands
 		if not line:
 			cl = [c + ' ' for c in self.commands]
-			#print("returing %s" % cl)
 			logging.debug('returing |%s|' % cl)
 			return cl
 

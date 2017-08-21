@@ -7,24 +7,25 @@ the communication. FtpSession class can also be used as an
 stand-alone ftp-session as described in class documentation.
 """
 from __future__ import print_function
-import sys, os, re, subprocess, inspect
+import getpass
+import inspect
+import mmap
+import os
+import re
+import sys
 import signal
 import socket
+import subprocess
+import threading
 import time
 import types
-import getpass
-import threading
-import mmap
 from . import _sendfile
-from multiprocessing import Manager, Process
-
-# from fuse import FUSE
-# from .ftp_fuse import FtpFuse
 from .ftp_raw import FtpRawRespHandler as FtpRaw
 from .ftp_raw import raw_command_error
 from .ftp_parser import parse_response_error
 from .ftp_parser import FtpClientParser
 from .file_info_cache import FileInfoCache
+from .ftp_parser import connection_closed_error
 
 
 class network_error(Exception): pass
@@ -61,7 +62,7 @@ class FtpSession:
 	"""
 	READ_BLOCK_SIZE = 1 << 19
 
-	def __init__(self, server, port=21, verbose=False):
+	def __init__(self, server, port=21, verbose=False, transfer_type='binary', transfer_mode='passive', logfile=None):
 		"""
 		Args:
 			server (str): domain-name or IP address of the ftp-server.
@@ -74,8 +75,14 @@ class FtpSession:
 		self.server = server
 		self.port = port
 		self.load_text_file_extensions()
-		self.passive = True
+		self.transfer_type = 'A'
+		if transfer_type == 'binary':
+			self.transfer_type = 'I'
+		self.passive = False
+		if transfer_mode == 'passive':
+			self.passive = True
 		self.verbose = verbose
+		self.logfile = logfile
 		self.file_info_cache = FileInfoCache(self)
 		self.stdout = sys.stderr
 		self.mountpoint = None
@@ -85,7 +92,7 @@ class FtpSession:
 		self.session_id = session_counter
 		session_counter += 1
 		self.init_session()
-		print("Created session %d" % self.session_id)
+		#print("Created session %d" % self.session_id)
 
 	def init_session(self):
 		self.cwd = ''
@@ -96,6 +103,7 @@ class FtpSession:
 		self.logged_in = False
 		self.data_socket = None
 		self.client = None
+		self.home_dir = None
 
 	def close_server(self):
 		self.disconnect_server()
@@ -130,6 +138,8 @@ class FtpSession:
 			print('Error occurred while parsing response to ftp command %s\n' % self.cmd, file=self.stdout)
 			self.close_server()
 			raise
+		if resp.resp_code == 421:
+			raise connection_closed_error
 		if self.parser.resp_failed(resp):
 			raise response_error
 		# print("got resp: \n" + str(resp))
@@ -322,7 +332,6 @@ class FtpSession:
 
 		mm_file = self.get_mmap_download(transfer_type, path, anonymous)
 
-		print("offset=%s" % offset)
 		if offset != 0:
 			self.send_raw_command("REST %d\r\n" % offset)
 			try:
@@ -1072,13 +1081,8 @@ class FtpSession:
 		if self.logged_in:
 			print("Already logged in.", file=self.stdout)
 			return
-
-		while not username:
-			username = raw_input('Username:')
-		if username == 'anonymous' and password is None:
-			password = 'guest'
-		if password is None:
-			password = getpass.getpass(prompt='Password:')
+		if not username:
+			raise login_error
 		self.connect_server(self.server, self.port)
 		self.get_welcome_msg()
 		self.send_raw_command("USER %s\r\n" % username)
@@ -1099,6 +1103,7 @@ class FtpSession:
 			pass
 		else:
 			raise login_error
+		self.home_dir = self.get_cwd()
 		if server_path:
 			self.cd([server_path])
 		self.username = username
@@ -1141,7 +1146,7 @@ class FtpSession:
 				self.fuse_process.join()
 			except:
 				pass
-		print("session %d closed" % self.session_id)
+		#print("session %d closed" % self.session_id)
 
 	@ftp_command
 	def quit(self, args):
@@ -1235,6 +1240,7 @@ if __name__ == '__main__':
 TODO:
 - Add mv, status, site, active(port), chmod, cat (use lftp syntax)
 - Add recursive directory download support and wildcard expansion for get
-- Add command completion using tab based on method documents
 - Add history search using arrow key
+- Add more exception handleing to ftpfuse, especially for timeout. Remove unncessary comments.
+- Remove verbosity for ftpmount
 '''

@@ -14,7 +14,6 @@ def main():
 		if line and regex.search(line):
 			pids.append(int(line.split()[1]))
 	for pid in pids:
-		#subprocess.call(("kill -2 %s" % " ".join(pids)).split(), shell=False)
 		os.kill(pid, signal.SIGINT)
 
 if __name__ == '__main__':
