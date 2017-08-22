@@ -1,5 +1,5 @@
 # About
-This project provides two main scripts, `ftpshell` and `ftpmount`, that facilitate working with FTP servers. 
+ftpshell Python package provides two main scripts, `ftpshell` and `ftpmount`, that facilitate working with FTP servers. 
 
 `ftpshell` is a command-line FTP client with an interface similar to the Bash shell. Main features provided by ftpshell
 include:
