@@ -25,10 +25,10 @@ The following prerequisites should be install before installing ftpshell:
 
 # ftpshell usage
 
-![Alt text](/Screenshot_ftpshell4.png "ftpshell usage")
+![Alt text](/other/Screenshot_ftpshell4.png "ftpshell usage")
 
 
 
 # ftpmount usage
 
-![Alt text](/Screenshot_ftpmount.bmp "ftpmount usage")
+![Alt text](/other/Screenshot_ftpmount.bmp "ftpmount usage")
